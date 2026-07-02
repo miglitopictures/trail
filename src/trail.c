@@ -100,7 +100,7 @@ int main()
     events[7].type = EVENT_MESSAGE;
     strcpy(events[7].message, "Uma fazenda... Longe demais para pedir água.");
     events[8].type = EVENT_MESSAGE;
-    strcpy(events[8].message, "Passarinho piam na distância.");
+    strcpy(events[8].message, "Passarinhos piam na distância.");
     // type detour
     events[9].type = EVENT_DETOUR;
     strcpy(events[9].message, "Pegou a estrada errada!");
@@ -151,7 +151,7 @@ int main()
     {
 
         // Restart
-        if (IsKeyDown(KEY_R))
+        if (IsKeyPressed(KEY_R))
         {
             hours = 0;
             distance = 0;
@@ -336,7 +336,7 @@ int main()
                 int width = MeasureText(message, size);
                 int x = windowWidth - width  - 30;
                 int y =  windowHeight - 50;
-                DrawText(TextFormat(message), x, y , size, WHITE);
+                DrawText(message, x, y , size, WHITE);
             }
 
             // Draw Hours and Distance
