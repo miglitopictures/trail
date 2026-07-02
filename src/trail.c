@@ -6,15 +6,25 @@
 
 // external (raysan5)
 #include "raylib.h"
-
+#include "raymath.h"
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
 
+// int resultado = intClamp(10,20,60);
+// print(resultado) > 20
+
+int intClamp(int value, int min, int max){
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
+
 enum State {
-    SETUP,
-    PLAYING,
-    GAMEOVER
+    STATE_PLAYING,
+    STATE_EVENT,
+    STATE_GAMEOVER
 };
 
 typedef struct {
@@ -22,48 +32,89 @@ typedef struct {
 
     bool sick;
     int health;
-
+    int energy;
     float velocity;
 } Person;
 
+
+typedef struct {
+    int count;
+    Person member[4];
+    // inventory
+} Party;
+
+enum EventType {
+    EVENT_MESSAGE,
+};
+
+typedef struct {
+    enum EventType type;
+    char message[256];
+} Event;
 
 
 typedef struct {
     int hours;
     float distance;
     enum State gameState;
-    Person party[4];
+    Party party;
 } GameData;
 
 int main()
 {
-    enum State gameState = PLAYING;
+    Event events[10];
+    events[0].type = EVENT_MESSAGE;
+    strcpy(events[0].message, "Uma família de Urubus rodeia no céu.");
+    events[1].type = EVENT_MESSAGE;
+    strcpy(events[1].message, "Muita gente morreu nessa região.");
+    events[2].type = EVENT_MESSAGE;
+    strcpy(events[2].message, "Um rio seco.");
+    events[3].type = EVENT_MESSAGE;
+    strcpy(events[3].message, "Um cachorro mendigo olha estranho para vocês.");
+    events[4].type = EVENT_MESSAGE;
+    strcpy(events[4].message, "Longo dia...");
+    events[5].type = EVENT_MESSAGE;
+    strcpy(events[5].message, "A vontade é de largar tudo e sair correndo.");
+    events[6].type = EVENT_MESSAGE;
+    strcpy(events[6].message, "Passam um esqueleto de boi.");
+    events[7].type = EVENT_MESSAGE;
+    strcpy(events[7].message, "Uma fazenda... Longe demais para pedir água.");
+    events[8].type = EVENT_MESSAGE;
+    strcpy(events[8].message, "Passarinho piam na distância.");
+    events[9].type = EVENT_MESSAGE;
+    strcpy(events[9].message, "Um preá passa rápido e levanta poeira.");
+
+
+    enum State gameState = STATE_PLAYING;
     int hours = 0;
     float distance = 0;
-    
-    Person party[4];
-    
+
+    Party party;
+
+    Event currentEvent;
+
     // setup party
     {
-
-        strcpy(party[0].name, "Fabiano");
-        party[0].velocity = 5;
-        strcpy(party[1].name, "Vitória");
-        party[1].velocity = 4;
-        strcpy(party[2].name, "Mais Novo");
-        party[2].velocity = 4;
-        strcpy(party[3].name, "Mais Velho");
-        party[3].velocity = 6;
+        party.count = 4;
+        strcpy(party.member[0].name, "Fabiano");
+        party.member[0].velocity = 5;
+        strcpy(party.member[1].name, "Vitória");
+        party.member[1].velocity = 4;
+        strcpy(party.member[2].name, "Mais Novo");
+        party.member[2].velocity = 4;
+        strcpy(party.member[3].name, "Mais Velho");
+        party.member[3].velocity = 6;
 
         for (int i = 0; i < 4; i++)
         {
-            party[i].health = 100;
-            party[i].sick = false;
+            party.member[i].health = 100;
+            party.member[i].energy = 100;
+            party.member[i].sick = false;
         }
         
     }
     
-    
+    const int hoursSimulated = 3;
     
     const int windowWidth = 1200;
     const int windowHeight = 960;
@@ -73,6 +124,20 @@ int main()
     while (!WindowShouldClose())
     {
         /* update */
+
+        // Restart
+        if (IsKeyDown(KEY_R))
+        {
+            hours = 0;
+            distance = 0;
+            gameState = STATE_PLAYING;
+            for (int i = 0; i < 4; i++)
+            {
+                party.member[i].health = 100;
+                party.member[i].energy = 100;
+                party.member[i].sick = false;
+            }
+        }
 
         // Save Game
         if (IsKeyPressed(KEY_S))
@@ -85,7 +150,7 @@ int main()
             data.hours = hours;
             data.distance = distance;
             data.gameState = gameState;
-            for (int i = 0; i < 4; i++) { data.party[i] = party[i]; }
+            data.party = party;
 
             fwrite(&data, sizeof(GameData), 1, file);
             fclose(file);
@@ -106,65 +171,94 @@ int main()
                 hours = data.hours;
                 distance = data.distance;
                 gameState = data.gameState;
-                for (int i = 0; i < 4; i++) { party[i] = data.party[i]; }
+                party = data.party;
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
                 fclose(file);
             };
         }
+
+
+        if (IsKeyPressed(KEY_D)) {
+            for (int i = 0; i < 4; i++){
+                party.member[i].health += GetRandomValue(0,3);
+                party.member[i].energy += GetRandomValue(2,10);
+                party.member[i].health = intClamp(party.member[i].health, 0, 100);
+                party.member[i].energy = intClamp(party.member[i].energy, 0, 100);
+            }
+            hours += 1;
+        }
         
+        if(IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+            switch (gameState) {
+                
+                case STATE_EVENT:
+                    gameState = STATE_PLAYING;
+                    //break;
+                
+                case STATE_PLAYING:
+                    // simular
+                    float velocityParty = 0;
 
-        if (IsKeyPressed(KEY_ENTER) && gameState == PLAYING) {
+                    for (int i = 0; i < 4; i++){
+
+                        // handle sickness
+                        if (!party.member[i].sick && party.member[i].energy < 70){
+                            int roll = GetRandomValue(1,100);
+                            if (roll < 3){
+                                party.member[i].sick = true;
+                            }
+                        } else {
+                            int roll = GetRandomValue(0,100);
+                            if (roll < 10){
+                                party.member[i].sick = false;
+                            }
+                        }
 
 
+                        // handle events (eventualmente)
 
-            // simular
+                        // energy loss
+                        party.member[i].energy -= GetRandomValue(3,15);
+                        party.member[i].energy = intClamp(party.member[i].energy, 0, 100);
 
-            float velocityParty = 0;
+                        // apply damage
+                        int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1);
+                        party.member[i].health -= damage;
 
-            for (int i = 0; i < 4; i++){
+                        if (party.member[i].health < 0) {party.member[i].health = 0;} // clamp health to zero 0
 
-                // handle sickness
-                if (!party[i].sick){
-                    int roll = GetRandomValue(1,100);
-                    if (roll < 10){
-                        party[i].sick = true;
+                        // soma velocidades para gerar media
+                        velocityParty += party.member[i].velocity * ((float) party.member[i].health / (float) 100) * ((float) party.member[i].energy / (float) 100);                        
                     }
-                } else {
-                    int roll = GetRandomValue(0,100);
-                    if (roll < 50){
-                        party[i].sick = false;
+
+                    velocityParty = velocityParty / party.count;
+                    distance += velocityParty * hoursSimulated;
+                    hours += hoursSimulated;
+
+
+                    // check health sum for gameover
+                    int healthSum = 0;
+                    for (int i = 0; i < 4; i++){
+                        healthSum += party.member[i].health;
                     }
-                }
+                    if (healthSum == 0)
+                    {
+                        gameState = STATE_GAMEOVER;
+                    }
 
-
-                // handle events (eventualmente)
-
-                // apply damage
-                int damage = GetRandomValue(5,10) * (party[i].sick ? 2 : 1);
-                party[i].health -= damage;
-
-                if (party[i].health < 0) {party[i].health = 0;} // clamp health to zero 0
-
-                velocityParty += party[i].velocity * ((float) party[i].health / (float) 100);
-                        
+                    // eventos aleatorios
+                    bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
+                    if (eventShouldHappen) {
+                        currentEvent = events[GetRandomValue(0,9)];
+                        gameState = STATE_EVENT;
+                    }
+                    break;
+                
+                
+                default:
+                    break;
             }
-
-            velocityParty = velocityParty / 4;
-            distance += velocityParty;
-            hours++;
-
-
-            // check health sum for gameover
-            int healthSum = 0;
-            for (int i = 0; i < 4; i++){
-                healthSum += party[i].health;
-            }
-            if (healthSum == 0)
-            {
-                gameState = GAMEOVER;
-            }
-
         }
 
         
@@ -175,10 +269,19 @@ int main()
             ClearBackground(BLACK);
 
             // Draw Gameover
-            if (gameState == GAMEOVER) {
+            if (gameState == STATE_GAMEOVER) {
                 int size = 30;
                 int width = MeasureText("EVERYONE DIED!", size);
                 DrawText("EVERYONE DIED!", windowWidth / 2 - width / 2, windowHeight / 2, size, WHITE);
+            }
+
+            if (gameState == STATE_EVENT) {
+                int size = 30;
+                int width = MeasureText(currentEvent.message, size);
+                int x = windowWidth / 2 - width / 2;
+                int y =  windowHeight / 2;
+                DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
+                DrawText(currentEvent.message, x, y, size, WHITE);
             }
 
             // Draw Hours and Distance
@@ -194,16 +297,17 @@ int main()
             {
                 int size = 30;
                 int posY = windowHeight - 50 - ((3-i)*30);
-                Color textColor = party[i].health == 0 ? RED : WHITE;
-                DrawText(party[i].name, 30, posY, 30, textColor);
-                DrawText(TextFormat("%03d", party[i].health), 230, posY, size, textColor);
-                if (party[i].health == 0){
+                Color textColor = party.member[i].health == 0 ? RED : WHITE;
+                DrawText(party.member[i].name, 30, posY, 30, textColor);
+                DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
+                if (party.member[i].health == 0){
                     DrawText("(dead)", 310, posY, 30, textColor);
-
-                } else if (party[i].sick){
+                    
+                } else if (party.member[i].sick){
                     DrawText("(sick)", 310, posY, 30, textColor);
-
+                    
                 }
+                DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
             }
 
 
