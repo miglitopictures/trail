@@ -45,6 +45,7 @@ typedef struct {
 
 enum EventType {
     EVENT_MESSAGE,
+    EVENT_DETOUR,
 };
 
 typedef struct {
@@ -62,7 +63,9 @@ typedef struct {
 
 int main()
 {
-    Event events[10];
+    // creating event list
+    // type message
+    Event events[11];
     events[0].type = EVENT_MESSAGE;
     strcpy(events[0].message, "Uma família de Urubus rodeia no céu.");
     events[1].type = EVENT_MESSAGE;
@@ -81,8 +84,11 @@ int main()
     strcpy(events[7].message, "Uma fazenda... Longe demais para pedir água.");
     events[8].type = EVENT_MESSAGE;
     strcpy(events[8].message, "Passarinho piam na distância.");
-    events[9].type = EVENT_MESSAGE;
-    strcpy(events[9].message, "Um preá passa rápido e levanta poeira.");
+    // type detour
+    events[9].type = EVENT_DETOUR;
+    strcpy(events[9].message, "Pegou a estrada errada!");
+    events[10].type = EVENT_DETOUR;
+    strcpy(events[10].message, "Andaram em círculos...");
 
 
     enum State gameState = STATE_PLAYING;
@@ -250,7 +256,15 @@ int main()
                     // eventos aleatorios
                     bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                     if (eventShouldHappen) {
-                        currentEvent = events[GetRandomValue(0,9)];
+                        // sorteia evento
+                        currentEvent = events[GetRandomValue(0,10)];
+
+                        if (currentEvent.type == EVENT_DETOUR) {
+                            int hoursLost = GetRandomValue(3,8);
+                            hours += hoursLost;
+                            strcpy(currentEvent.message, TextFormat("%s Perdeu %d horas.", currentEvent.message, hoursLost));
+                        }
+
                         gameState = STATE_EVENT;
                     }
                     break;
