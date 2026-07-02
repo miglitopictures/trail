@@ -10,16 +10,33 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
-
-// int resultado = intClamp(10,20,60);
-// print(resultado) > 20
-
-int intClamp(int value, int min, int max){
+int clampInt(int value, int min, int max){
     if (value < min) return min;
     if (value > max) return max;
     return value;
 }
 
+typedef struct {
+    float timeRemaining;
+    float duration;
+} Timer;
+
+void setTimer(Timer *timer, float duration){
+    timer->duration = duration;
+    timer->timeRemaining = duration;
+}
+
+void resetTimer(Timer *timer){
+    timer->timeRemaining = timer->duration;
+}
+
+int updateTimer(Timer *timer, double deltaTime){
+    if (timer->timeRemaining <= 0.0) {
+        return 1;
+    };
+    timer->timeRemaining -= deltaTime;
+    return 0;
+}
 
 enum State {
     STATE_PLAYING,
@@ -90,16 +107,21 @@ int main()
     events[10].type = EVENT_DETOUR;
     strcpy(events[10].message, "Andaram em círculos...");
 
-
+    // setup gameplay data
+    bool moving = false;
     enum State gameState = STATE_PLAYING;
     int hours = 0;
     float distance = 0;
 
-    Party party;
+    Event currentEvent; // event buffer to hold current random event
 
-    Event currentEvent;
+    // move timer
+    Timer moveTimer;
+    setTimer(&moveTimer, 1.5);
 
+    
     // setup party
+    Party party;
     {
         party.count = 4;
         strcpy(party.member[0].name, "Fabiano");
@@ -119,9 +141,7 @@ int main()
         }
         
     }
-    
-    const int hoursSimulated = 3;
-    
+        
     const int windowWidth = 1200;
     const int windowHeight = 960;
 
@@ -129,7 +149,6 @@ int main()
 
     while (!WindowShouldClose())
     {
-        /* update */
 
         // Restart
         if (IsKeyDown(KEY_R))
@@ -184,18 +203,92 @@ int main()
             };
         }
 
-
+        // Reset
         if (IsKeyPressed(KEY_D)) {
             for (int i = 0; i < 4; i++){
                 party.member[i].health += GetRandomValue(0,3);
                 party.member[i].energy += GetRandomValue(2,10);
-                party.member[i].health = intClamp(party.member[i].health, 0, 100);
-                party.member[i].energy = intClamp(party.member[i].energy, 0, 100);
+                party.member[i].health = clampInt(party.member[i].health, 0, 100);
+                party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
             }
             hours += 1;
         }
         
-        if(IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+        if (moving){
+            if (updateTimer(&moveTimer, GetFrameTime()) == 1) {
+                // reset timer
+                moving = false;
+                resetTimer(&moveTimer);
+
+
+                // simulate step
+                float velocityParty = 0;
+                int hoursSimulated = 3;
+
+                for (int i = 0; i < 4; i++){
+
+                    // simulate sickness
+                    if (!party.member[i].sick && party.member[i].energy < 70){
+                        int roll = GetRandomValue(1,100);
+                        if (roll < 3){
+                            party.member[i].sick = true;
+                        }
+                    } else {
+                        int roll = GetRandomValue(0,100);
+                        if (roll < 10){
+                            party.member[i].sick = false;
+                        }
+                    }
+
+                    // simulate energy loss
+                    party.member[i].energy -= GetRandomValue(3,15);
+                    party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
+
+                    // simulate health loss (damage)
+                    int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1);
+                    party.member[i].health -= damage;
+                    if (party.member[i].health < 0) {party.member[i].health = 0;} // clamp health to zero 0
+
+                    // soma velocidades para gerar media
+                    velocityParty += party.member[i].velocity * ((float) party.member[i].health / (float) 100) * ((float) party.member[i].energy / (float) 100);                        
+                }
+
+                velocityParty = velocityParty / party.count;
+                distance += velocityParty * hoursSimulated;
+                hours += hoursSimulated;
+
+
+                // check health sum for gameover
+                int healthSum = 0;
+                for (int i = 0; i < 4; i++){
+                    healthSum += party.member[i].health;
+                }
+                if (healthSum == 0)
+                {
+                    gameState = STATE_GAMEOVER;
+                }
+
+                // eventos aleatorios
+                bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
+                if (eventShouldHappen) {
+                    // sorteia evento
+                    currentEvent = events[GetRandomValue(0,10)];
+
+                    // se for um detour
+                    if (currentEvent.type == EVENT_DETOUR) {
+                        int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
+                        hours += hoursLost; // aplica horas perdidas
+                        strcpy(currentEvent.message, TextFormat("%s Perdeu %d horas.", currentEvent.message, hoursLost)); //edita mensagem para falar quantas horas perdeu
+                    }
+
+                    gameState = STATE_EVENT;
+                }
+            }
+        }
+        
+        // Enter
+        if(!moving && (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){
+
             switch (gameState) {
                 
                 case STATE_EVENT:
@@ -203,70 +296,7 @@ int main()
                     //break;
                 
                 case STATE_PLAYING:
-                    // simular
-                    float velocityParty = 0;
-
-                    for (int i = 0; i < 4; i++){
-
-                        // handle sickness
-                        if (!party.member[i].sick && party.member[i].energy < 70){
-                            int roll = GetRandomValue(1,100);
-                            if (roll < 3){
-                                party.member[i].sick = true;
-                            }
-                        } else {
-                            int roll = GetRandomValue(0,100);
-                            if (roll < 10){
-                                party.member[i].sick = false;
-                            }
-                        }
-
-
-                        // handle events (eventualmente)
-
-                        // energy loss
-                        party.member[i].energy -= GetRandomValue(3,15);
-                        party.member[i].energy = intClamp(party.member[i].energy, 0, 100);
-
-                        // apply damage
-                        int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1);
-                        party.member[i].health -= damage;
-
-                        if (party.member[i].health < 0) {party.member[i].health = 0;} // clamp health to zero 0
-
-                        // soma velocidades para gerar media
-                        velocityParty += party.member[i].velocity * ((float) party.member[i].health / (float) 100) * ((float) party.member[i].energy / (float) 100);                        
-                    }
-
-                    velocityParty = velocityParty / party.count;
-                    distance += velocityParty * hoursSimulated;
-                    hours += hoursSimulated;
-
-
-                    // check health sum for gameover
-                    int healthSum = 0;
-                    for (int i = 0; i < 4; i++){
-                        healthSum += party.member[i].health;
-                    }
-                    if (healthSum == 0)
-                    {
-                        gameState = STATE_GAMEOVER;
-                    }
-
-                    // eventos aleatorios
-                    bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
-                    if (eventShouldHappen) {
-                        // sorteia evento
-                        currentEvent = events[GetRandomValue(0,10)];
-
-                        if (currentEvent.type == EVENT_DETOUR) {
-                            int hoursLost = GetRandomValue(3,8);
-                            hours += hoursLost;
-                            strcpy(currentEvent.message, TextFormat("%s Perdeu %d horas.", currentEvent.message, hoursLost));
-                        }
-
-                        gameState = STATE_EVENT;
-                    }
+                    moving = true;
                     break;
                 
                 
@@ -289,6 +319,7 @@ int main()
                 DrawText("EVERYONE DIED!", windowWidth / 2 - width / 2, windowHeight / 2, size, WHITE);
             }
 
+            // Draw Event
             if (gameState == STATE_EVENT) {
                 int size = 30;
                 int width = MeasureText(currentEvent.message, size);
@@ -296,6 +327,16 @@ int main()
                 int y =  windowHeight / 2;
                 DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
                 DrawText(currentEvent.message, x, y, size, WHITE);
+            }
+
+            // Moving?
+            {
+                int size = 30;
+                char *message = moving ? "Moving" : "Enter to continue";
+                int width = MeasureText(message, size);
+                int x = windowWidth - width  - 30;
+                int y =  windowHeight - 50;
+                DrawText(TextFormat(message), x, y , size, WHITE);
             }
 
             // Draw Hours and Distance
