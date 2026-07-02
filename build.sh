@@ -1,2 +1,2 @@
-gcc src/trail.c -o trail -I./include -L./lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-./trail
+gcc src/trail.c -o vidas_secas -I./include -L./lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+./vidas_secas

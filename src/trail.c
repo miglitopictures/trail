@@ -30,6 +30,7 @@ typedef struct {
 
 typedef struct {
     int hours;
+    float distance;
     enum State gameState;
     Person party[4];
 } GameData;
@@ -82,6 +83,7 @@ int main()
 
             GameData data;
             data.hours = hours;
+            data.distance = distance;
             data.gameState = gameState;
             for (int i = 0; i < 4; i++) { data.party[i] = party[i]; }
 
@@ -102,6 +104,7 @@ int main()
                 fclose(file);
 
                 hours = data.hours;
+                distance = data.distance;
                 gameState = data.gameState;
                 for (int i = 0; i < 4; i++) { party[i] = data.party[i]; }
             } else {
