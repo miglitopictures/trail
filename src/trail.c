@@ -79,11 +79,29 @@ enum EventType {
     EVENT_DETOUR,
 };
 
+typedef struct Event Event;
+
 typedef struct {
+    char message[128];
+    Event *next;
+} Option;
+
+struct Event {
     enum EventType type;
     char message[256];
-} Event;
+    int numOptions;
+    Option *options;
+};
 
+
+Event createEvent(char *message, Option *options, int numOptions, enum EventType type){
+    Event event = {0};
+    strcpy(event.message, message);
+    event.options = options;
+    event.type = type;
+    event.numOptions = numOptions;
+    return event;
+};
 
 typedef struct {
     int hours;
@@ -97,30 +115,50 @@ int main()
 {
     // creating event list
     // type message
-    Event events[11];
-    events[0].type = EVENT_MESSAGE;
-    strcpy(events[0].message, "Uma família de Urubus rodeia no céu.");
-    events[1].type = EVENT_MESSAGE;
-    strcpy(events[1].message, "Muita gente morreu nessa região.");
-    events[2].type = EVENT_MESSAGE;
-    strcpy(events[2].message, "Um rio seco.");
-    events[3].type = EVENT_MESSAGE;
-    strcpy(events[3].message, "Um cachorro mendigo olha estranho para vocês.");
-    events[4].type = EVENT_MESSAGE;
-    strcpy(events[4].message, "Longo dia...");
-    events[5].type = EVENT_MESSAGE;
-    strcpy(events[5].message, "A vontade é de largar tudo e sair correndo.");
-    events[6].type = EVENT_MESSAGE;
-    strcpy(events[6].message, "Passam um esqueleto de boi.");
-    events[7].type = EVENT_MESSAGE;
-    strcpy(events[7].message, "Uma fazenda... Longe demais para pedir água.");
-    events[8].type = EVENT_MESSAGE;
-    strcpy(events[8].message, "Passarinhos piam na distância.");
+    Event events[11] = {0};
+    events[0] = createEvent("Uma família de Urubus rodeia no céu.", NULL, 0, EVENT_MESSAGE);
+    events[1] = createEvent("Muita gente morreu nessa região.", NULL, 0, EVENT_MESSAGE);
+    events[2] = createEvent("Um rio seco.", NULL, 0, EVENT_MESSAGE);
+    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", NULL, 0, EVENT_MESSAGE);
+    events[4] = createEvent("Longo dia...", NULL, 0, EVENT_MESSAGE);
+    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", NULL, 0, EVENT_MESSAGE);
+    events[6] = createEvent("Passam um esqueleto de boi.", NULL, 0, EVENT_MESSAGE);
+    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", NULL, 0, EVENT_MESSAGE);
+    events[8] = createEvent("Passarinhos piam na distância.", NULL, 0, EVENT_MESSAGE);
     // type detour
-    events[9].type = EVENT_DETOUR;
-    strcpy(events[9].message, "Pegou a estrada errada!");
-    events[10].type = EVENT_DETOUR;
-    strcpy(events[10].message, "Andaram em círculos...");
+    events[9] = createEvent("Pegou a estrada errada!", NULL, 0, EVENT_DETOUR);
+    events[10] = createEvent("Andaram em círculos...", NULL, 0, EVENT_DETOUR);
+  
+    // eventEmptyHouse
+    Event eventEnteredHouse = createEvent("Nothing inside...", NULL, 0, EVENT_MESSAGE);
+    Option optionsEmptyHouse[] = {
+        {"Enter", &eventEnteredHouse},
+        {"Go Away", NULL}
+    };
+    Event eventEmptyHouse = createEvent("Found empty house", optionsEmptyHouse, 2, EVENT_MESSAGE);
+
+
+    // eventFoundStranger
+    Event eventFollowStranger = createEvent("Pegaram o caminho errado...", NULL, 0, EVENT_DETOUR);
+    Option optionsStrangerHasShortcut[] = {
+        {"Seguir", &eventFollowStranger},
+        {"Deixar pra lá", NULL}
+    };
+    Event eventStrangerHasShortcut = createEvent("Conheço um atalho!", optionsStrangerHasShortcut, 2, EVENT_MESSAGE);
+
+    Option optionsTalkToStranger[] = {
+        {"Sim", &eventStrangerHasShortcut},
+        {"Não responder", NULL}
+    };
+    Event eventTalkToStranger = createEvent("Estão indo para o litoral?", optionsTalkToStranger, 2, EVENT_MESSAGE);
+
+    Option optionsFoundStranger[] = {
+        {"Talk", &eventTalkToStranger},
+        {"Go Away", NULL}
+    };
+    Event eventFoundStranger = createEvent("Um estranho chama sua atenção", optionsFoundStranger, 2, EVENT_MESSAGE);
+    
+
 
     // setup gameplay data
     bool moving = false;
@@ -190,6 +228,15 @@ int main()
             party.inventory.food = 50;
         }
 
+        if (IsKeyPressed(KEY_F))
+        {
+            currentEvent = eventEmptyHouse;
+        }
+        if (IsKeyPressed(KEY_G))
+        {
+            currentEvent = eventFoundStranger;
+        }
+
         // Save Game
         if (IsKeyPressed(KEY_S))
         {
@@ -222,8 +269,8 @@ int main()
 
                 hours = data.hours;
                 distance = data.distance;
-                gameState = data.gameState;
-                currentEvent = data.currentEvent;
+                gameState = STATE_PLAYING;
+                currentEvent = (Event){0}; // how do i clear it?
                 party = data.party;
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
@@ -343,8 +390,11 @@ int main()
             switch (gameState) {
                 
                 case STATE_EVENT:
+                    if (currentEvent.numOptions > 0) {
+                        break;
+                    }
                     gameState = STATE_PLAYING;
-                    //break;
+                    
                 
                 case STATE_PLAYING:
                     moving = true;
@@ -372,12 +422,34 @@ int main()
 
             // Draw Event
             if (gameState == STATE_EVENT) {
-                int size = 30;
-                int width = MeasureText(currentEvent.message, size);
-                int x = windowWidth / 2 - width / 2;
-                int y =  windowHeight / 2;
-                DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                DrawText(currentEvent.message, x, y, size, WHITE);
+                if (currentEvent.numOptions == 0) {
+                    int size = 30;
+                    int width = MeasureText(currentEvent.message, size);
+                    int x = windowWidth / 2 - width / 2;
+                    int y =  windowHeight / 2;
+                    DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
+                    DrawText(currentEvent.message, x, y, size, WHITE);
+                } else {
+                    int size = 30;
+                    int width = MeasureText(currentEvent.message, size);
+                    int x = windowWidth / 2 - width / 2;
+                    int y =  windowHeight / 2;
+                    DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
+                    DrawText(currentEvent.message, x, y, size, WHITE);
+
+                    for (int i = 0; i < currentEvent.numOptions; i++)
+                    {
+                        if (GuiButton((Rectangle){200 + i*120,400,100,40}, currentEvent.options[i].message)) {
+                            if (currentEvent.options[i].next != NULL) {
+                                currentEvent = *currentEvent.options[i].next;
+                            } else {
+                                gameState = STATE_PLAYING;
+                            }
+                        }
+                    }
+            
+                }
+                
             }
 
             // Moving?
