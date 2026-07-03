@@ -46,7 +46,7 @@ enum State {
 
 typedef struct {
     char name[16];
-
+    bool dead;
     bool sick;
     int health;
     int energy;
@@ -55,9 +55,15 @@ typedef struct {
 
 
 typedef struct {
+    int food;
+    int ammo;
+    int footwear;
+} Inventory;
+
+typedef struct {
     int count;
     Person member[4];
-    // inventory
+    Inventory inventory;
 } Party;
 
 enum EventType {
@@ -75,6 +81,7 @@ typedef struct {
     int hours;
     float distance;
     enum State gameState;
+    Event currentEvent;
     Party party;
 } GameData;
 
@@ -117,7 +124,7 @@ int main()
 
     // move timer
     Timer moveTimer;
-    setTimer(&moveTimer, 1.5);
+    setTimer(&moveTimer, 0.3);
 
     
     // setup party
@@ -138,7 +145,13 @@ int main()
             party.member[i].health = 100;
             party.member[i].energy = 100;
             party.member[i].sick = false;
+            party.member[i].dead = false;
         }
+
+        // inventory init
+        party.inventory.ammo = 10;
+        party.inventory.food = 10;
+        party.inventory.footwear = 4;
         
     }
         
@@ -175,6 +188,7 @@ int main()
             data.hours = hours;
             data.distance = distance;
             data.gameState = gameState;
+            data.currentEvent = currentEvent;
             data.party = party;
 
             fwrite(&data, sizeof(GameData), 1, file);
@@ -196,6 +210,7 @@ int main()
                 hours = data.hours;
                 distance = data.distance;
                 gameState = data.gameState;
+                currentEvent = data.currentEvent;
                 party = data.party;
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
@@ -203,9 +218,10 @@ int main()
             };
         }
 
-        // Reset
+        // Rest
         if (IsKeyPressed(KEY_D)) {
             for (int i = 0; i < 4; i++){
+                if (party.member[i].dead) continue;
                 party.member[i].health += GetRandomValue(0,3);
                 party.member[i].energy += GetRandomValue(2,10);
                 party.member[i].health = clampInt(party.member[i].health, 0, 100);
@@ -225,12 +241,16 @@ int main()
                 float velocityParty = 0;
                 int hoursSimulated = 3;
 
+                party.count = 0;
                 for (int i = 0; i < 4; i++){
 
+                    if (party.member[i].dead) continue;
+                
                     // simulate sickness
                     if (!party.member[i].sick && party.member[i].energy < 70){
                         int roll = GetRandomValue(1,100);
-                        if (roll < 3){
+                        int chanceOfSickness = party.member[i].energy < 30 ? 10 : 3;
+                        if (roll < chanceOfSickness){
                             party.member[i].sick = true;
                         }
                     } else {
@@ -245,25 +265,28 @@ int main()
                     party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
 
                     // simulate health loss (damage)
-                    int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1);
+                    int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1) * (party.member[i].energy == 0 ? 2 : 1);
                     party.member[i].health -= damage;
-                    if (party.member[i].health < 0) {party.member[i].health = 0;} // clamp health to zero 0
+                    if (party.member[i].health <= 0) {
+                        party.member[i].health = 0;
+                        party.member[i].dead = true;
+                        continue;
+                    } // clamp health to zero 0
+
+                    // its aliveee (contando os vivos)
+                    party.count++;
 
                     // soma velocidades para gerar media
                     velocityParty += party.member[i].velocity * ((float) party.member[i].health / (float) 100) * ((float) party.member[i].energy / (float) 100);                        
                 }
 
-                velocityParty = velocityParty / party.count;
+                velocityParty = party.count > 0 ? (velocityParty / party.count) : 0;
                 distance += velocityParty * hoursSimulated;
                 hours += hoursSimulated;
 
 
-                // check health sum for gameover
-                int healthSum = 0;
-                for (int i = 0; i < 4; i++){
-                    healthSum += party.member[i].health;
-                }
-                if (healthSum == 0)
+                // check gameover
+                if (party.count == 0)
                 {
                     gameState = STATE_GAMEOVER;
                 }
@@ -344,6 +367,12 @@ int main()
                 int size = 30;
                 DrawText(TextFormat("Horas: %02d", hours), 30, 30, size, WHITE);
                 DrawText(TextFormat("Distância: %.2fKm", distance), 30, 60, size, WHITE);
+                DrawText(TextFormat("Alive: %d", party.count), 30, 90, size, WHITE);
+            }
+
+            // Draw Number of people alive
+            {
+                int size = 30;
             }
 
 
