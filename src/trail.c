@@ -57,13 +57,21 @@ typedef struct {
 typedef struct {
     int food;
     int ammo;
+    int weapon;
     int footwear;
 } Inventory;
+
+enum RationSize {
+    SMALL  = 1,
+    MEDIUM = 2,
+    LARGE  = 3,
+};
 
 typedef struct {
     int count;
     Person member[4];
     Inventory inventory;
+    enum RationSize ration;
 } Party;
 
 enum EventType {
@@ -150,8 +158,10 @@ int main()
 
         // inventory init
         party.inventory.ammo = 10;
-        party.inventory.food = 10;
+        party.inventory.weapon = 1;
+        party.inventory.food = 50;
         party.inventory.footwear = 4;
+        party.ration = MEDIUM;
         
     }
         
@@ -174,7 +184,10 @@ int main()
                 party.member[i].health = 100;
                 party.member[i].energy = 100;
                 party.member[i].sick = false;
+                party.member[i].dead = false;
             }
+            party.count = 4;
+            party.inventory.food = 50;
         }
 
         // Save Game
@@ -245,6 +258,14 @@ int main()
                 for (int i = 0; i < 4; i++){
 
                     if (party.member[i].dead) continue;
+
+                    // eat
+                    bool couldEat = party.inventory.food >= party.ration;
+                    if (couldEat) {
+                        party.inventory.food -= party.ration; // decrement total food
+                    } else {
+                        party.inventory.food = 0;
+                    }; 
                 
                     // simulate sickness
                     if (!party.member[i].sick && party.member[i].energy < 70){
@@ -265,7 +286,13 @@ int main()
                     party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
 
                     // simulate health loss (damage)
-                    int damage = GetRandomValue(0,5) * (party.member[i].sick ? 2 : 1) * (party.member[i].energy == 0 ? 2 : 1);
+                    bool isSick = party.member[i].sick;
+                    int damage = GetRandomValue(isSick || !couldEat ? 1 : 0, 5);
+                    damage = damage * (isSick ? 2 : 1); // if sick
+                    damage = damage * (party.member[i].energy == 0 ? 2 : 1); // if exausted
+                    damage = damage * (4 - party.ration); // ration size dependent health
+                    damage = damage * (couldEat? 1 : 2);
+
                     party.member[i].health -= damage;
                     if (party.member[i].health <= 0) {
                         party.member[i].health = 0;
@@ -281,6 +308,7 @@ int main()
                 }
 
                 velocityParty = party.count > 0 ? (velocityParty / party.count) : 0;
+                
                 distance += velocityParty * hoursSimulated;
                 hours += hoursSimulated;
 
@@ -367,7 +395,8 @@ int main()
                 int size = 30;
                 DrawText(TextFormat("Horas: %02d", hours), 30, 30, size, WHITE);
                 DrawText(TextFormat("Distância: %.2fKm", distance), 30, 60, size, WHITE);
-                DrawText(TextFormat("Alive: %d", party.count), 30, 90, size, WHITE);
+                DrawText(TextFormat("Food: %d", party.inventory.food), 30, 90, size, WHITE);
+                DrawText(TextFormat("Alive: %d", party.count), 30, 120, size, WHITE);
             }
 
             // Draw Number of people alive
