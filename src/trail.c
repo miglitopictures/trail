@@ -83,33 +83,45 @@ typedef struct Event Event;
 
 typedef struct {
     char message[128];
-    Event *next;
+    int nextId;
 } Option;
 
 struct Event {
-    enum EventType type;
+    int id;
     char message[256];
+    enum EventType type;
     int numOptions;
-    Option *options;
+    Option options[4];
 };
 
-Event createEvent(char *message, Option *options, int numOptions, enum EventType type){
+Event createEvent(int id, char *message, enum EventType type){
     Event event = {0};
+    event.id = id;
     strcpy(event.message, message);
-    event.options = options;
     event.type = type;
-    event.numOptions = numOptions;
+    event.numOptions = 0;
     return event;
 };
 
-void triggerEvent(Event *event, Event *currentEvent, enum State *gameState, int *hours){
-    *currentEvent = *event;
-    *gameState = STATE_EVENT;
+Event events[32] = {0};
+
+void addOption(Event *e, char *message, int nextIndex){
+    Option option = {0};
+    strcpy(option.message, message);
+    option.nextId = nextIndex;
+    e->options[e->numOptions] = option;
+    e->numOptions++;
+}
+
+void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *hours){
+    *currentEvent = eventId;  // set new id
+    *gameState = STATE_EVENT; // set gamestate
+    
     // se for um detour
-    if (event->type == EVENT_DETOUR) {
+    if (events[eventId].type == EVENT_DETOUR) {
         int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
         *hours += hoursLost; // aplica horas perdidas
-        strcpy(currentEvent->message, TextFormat("%s Perdeu %d horas.", currentEvent->message, hoursLost)); //edita mensagem para falar quantas horas perdeu
+        strcpy(events[*currentEvent].message, TextFormat("%s Perdeu %d horas.", events[*currentEvent].message, hoursLost)); //edita mensagem para falar quantas horas perdeu
     }
 }
 
@@ -117,58 +129,55 @@ typedef struct {
     int hours;
     float distance;
     enum State gameState;
-    Event currentEvent;
+    int currentEvent;
     Party party;
 } GameData;
 
 int main()
 {
     // creating event list
-    // type message
-    Event events[11] = {0};
-    events[0] = createEvent("Uma família de Urubus rodeia no céu.", NULL, 0, EVENT_MESSAGE);
-    events[1] = createEvent("Muita gente morreu nessa região.", NULL, 0, EVENT_MESSAGE);
-    events[2] = createEvent("Um rio seco.", NULL, 0, EVENT_MESSAGE);
-    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", NULL, 0, EVENT_MESSAGE);
-    events[4] = createEvent("Longo dia...", NULL, 0, EVENT_MESSAGE);
-    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", NULL, 0, EVENT_MESSAGE);
-    events[6] = createEvent("Passam um esqueleto de boi.", NULL, 0, EVENT_MESSAGE);
-    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", NULL, 0, EVENT_MESSAGE);
-    events[8] = createEvent("Passarinhos piam na distância.", NULL, 0, EVENT_MESSAGE);
+    events[0] = createEvent(0, "Uma família de Urubus rodeia no céu.", EVENT_MESSAGE);
+    events[1] = createEvent(1, "Muita gente morreu nessa região.", EVENT_MESSAGE);
+    events[2] = createEvent(2, "Um rio seco.", EVENT_MESSAGE);
+    events[3] = createEvent(3, "Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE);
+    events[4] = createEvent(4, "Longo dia...", EVENT_MESSAGE);
+    events[5] = createEvent(5, "A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE);
+    events[6] = createEvent(6, "Passam um esqueleto de boi.", EVENT_MESSAGE);
+    events[7] = createEvent(7, "Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE);
+    events[8] = createEvent(8, "Passarinhos piam na distância.", EVENT_MESSAGE);
     // type detour
-    events[9] = createEvent("Pegou a estrada errada!", NULL, 0, EVENT_DETOUR);
-    events[10] = createEvent("Andaram em círculos...", NULL, 0, EVENT_DETOUR);
+    events[9] = createEvent(9, "Pegou a estrada errada!", EVENT_DETOUR);
+    events[10] = createEvent(10, "Andaram em círculos...", EVENT_DETOUR);
   
     // eventEmptyHouse
-    Event eventEnteredHouse = createEvent("Nothing inside...", NULL, 0, EVENT_MESSAGE);
-    Option optionsEmptyHouse[] = {
-        {"Enter", &eventEnteredHouse},
-        {"Go Away", NULL}
-    };
-    Event eventEmptyHouse = createEvent("Found empty house", optionsEmptyHouse, 2, EVENT_MESSAGE);
+    #define EMPTY_HOUSE       11
+    #define EMPTY_HOUSE_ENTER 12
 
+    events[EMPTY_HOUSE] = createEvent(EMPTY_HOUSE, "Found empty house", EVENT_MESSAGE);
+    addOption(&events[EMPTY_HOUSE], "Enter", EMPTY_HOUSE_ENTER);
+    addOption(&events[EMPTY_HOUSE], "Go Away", -1);
+
+    events[EMPTY_HOUSE_ENTER] = createEvent(EMPTY_HOUSE_ENTER, "Nothing inside...", EVENT_MESSAGE);
 
     // eventFoundStranger
-    Event eventFollowStranger = createEvent("Pegaram o caminho errado...", NULL, 0, EVENT_DETOUR);
-    Option optionsStrangerHasShortcut[] = {
-        {"Seguir", &eventFollowStranger},
-        {"Deixar pra lá", NULL}
-    };
-    Event eventStrangerHasShortcut = createEvent("Conheço um atalho!", optionsStrangerHasShortcut, 2, EVENT_MESSAGE);
+    #define FOUND_STRANGER       13
+    #define STRANGER_TALK        14
+    #define STRANGER_SHORTCUT    15
+    #define STRANGER_WRONG_ROAD  16
 
-    Option optionsTalkToStranger[] = {
-        {"Sim", &eventStrangerHasShortcut},
-        {"Não responder", NULL}
-    };
-    Event eventTalkToStranger = createEvent("Estão indo para o litoral?", optionsTalkToStranger, 2, EVENT_MESSAGE);
-
-    Option optionsFoundStranger[] = {
-        {"Talk", &eventTalkToStranger},
-        {"Go Away", NULL}
-    };
-    Event eventFoundStranger = createEvent("Um estranho chama sua atenção", optionsFoundStranger, 2, EVENT_MESSAGE);
+    events[FOUND_STRANGER]      = createEvent(FOUND_STRANGER, "Um estranho chama sua atenção", EVENT_MESSAGE);
+    addOption(&events[FOUND_STRANGER], "Talk",     STRANGER_TALK);
+    addOption(&events[FOUND_STRANGER], "Go Away",  -1);
     
+    events[STRANGER_TALK]       = createEvent(STRANGER_TALK, "Estão indo para o litoral?", EVENT_MESSAGE);
+    addOption(&events[STRANGER_TALK], "Sim",           STRANGER_SHORTCUT);
+    addOption(&events[STRANGER_TALK], "Não responder", -1);
 
+    events[STRANGER_SHORTCUT]   = createEvent(STRANGER_SHORTCUT, "Conheço um atalho!", EVENT_MESSAGE);
+    addOption(&events[STRANGER_SHORTCUT], "Seguir",        STRANGER_WRONG_ROAD);
+    addOption(&events[STRANGER_SHORTCUT], "Deixar pra lá", -1);
+    
+    events[STRANGER_WRONG_ROAD] = createEvent(STRANGER_WRONG_ROAD, "Pegaram o caminho errado...", EVENT_DETOUR);
 
     // setup gameplay data
     bool moving = false;
@@ -176,7 +185,7 @@ int main()
     int hours = 0;
     float distance = 0;
 
-    Event currentEvent; // event buffer to hold current random event
+    int currentEventId; // id of current event
 
     // move timer
     Timer moveTimer;
@@ -240,11 +249,11 @@ int main()
 
         if (IsKeyPressed(KEY_F))
         {
-            currentEvent = eventEmptyHouse;
+            currentEventId = EMPTY_HOUSE;
         }
         if (IsKeyPressed(KEY_G))
         {
-            currentEvent = eventFoundStranger;
+            currentEventId = FOUND_STRANGER;
         }
 
         // Save Game
@@ -258,7 +267,7 @@ int main()
             data.hours = hours;
             data.distance = distance;
             data.gameState = gameState;
-            data.currentEvent = currentEvent;
+            data.currentEvent = currentEventId;
             data.party = party;
 
             fwrite(&data, sizeof(GameData), 1, file);
@@ -279,8 +288,8 @@ int main()
 
                 hours = data.hours;
                 distance = data.distance;
-                gameState = STATE_PLAYING;
-                currentEvent = (Event){0}; // how do i clear it?
+                gameState = data.gameState;
+                currentEventId = data.currentEvent;
                 party = data.party;
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
@@ -380,7 +389,7 @@ int main()
                 bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                 if (eventShouldHappen) {
 
-                    triggerEvent(&events[GetRandomValue(0,10)], &currentEvent, &gameState, &hours);
+                    triggerEvent(GetRandomValue(0,10), &currentEventId, &gameState, &hours);
 
                 }
             }
@@ -392,7 +401,7 @@ int main()
             switch (gameState) {
                 
                 case STATE_EVENT:
-                    if (currentEvent.numOptions > 0) {
+                    if (events[currentEventId].numOptions > 0) {
                         break;
                     }
                     gameState = STATE_PLAYING;
@@ -424,26 +433,26 @@ int main()
 
             // Draw Event
             if (gameState == STATE_EVENT) {
-                if (currentEvent.numOptions == 0) {
+                if (events[currentEventId].numOptions == 0) {
                     int size = 30;
-                    int width = MeasureText(currentEvent.message, size);
+                    int width = MeasureText(events[currentEventId].message, size);
                     int x = windowWidth / 2 - width / 2;
                     int y =  windowHeight / 2;
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(currentEvent.message, x, y, size, WHITE);
+                    DrawText(events[currentEventId].message, x, y, size, WHITE);
                 } else {
                     int size = 30;
-                    int width = MeasureText(currentEvent.message, size);
+                    int width = MeasureText(events[currentEventId].message, size);
                     int x = windowWidth / 2 - width / 2;
                     int y =  windowHeight / 2;
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(currentEvent.message, x, y, size, WHITE);
+                    DrawText(events[currentEventId].message, x, y, size, WHITE);
 
-                    for (int i = 0; i < currentEvent.numOptions; i++)
+                    for (int i = 0; i < events[currentEventId].numOptions; i++)
                     {
-                        if (GuiButton((Rectangle){200 + i*120,400,100,40}, currentEvent.options[i].message)) {
-                            if (currentEvent.options[i].next != NULL) {
-                                triggerEvent(currentEvent.options[i].next, &currentEvent, &gameState, &hours);
+                        if (GuiButton((Rectangle){200 + i*120,400,100,40}, events[currentEventId].options[i].message)) {
+                            if (events[currentEventId].options[i].nextId != -1) {
+                                triggerEvent(events[currentEventId].options[i].nextId, &currentEventId, &gameState, &hours);
                             } else {
                                 gameState = STATE_PLAYING;
                             }
