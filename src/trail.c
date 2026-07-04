@@ -93,7 +93,6 @@ struct Event {
     Option *options;
 };
 
-
 Event createEvent(char *message, Option *options, int numOptions, enum EventType type){
     Event event = {0};
     strcpy(event.message, message);
@@ -102,6 +101,17 @@ Event createEvent(char *message, Option *options, int numOptions, enum EventType
     event.numOptions = numOptions;
     return event;
 };
+
+void triggerEvent(Event *event, Event *currentEvent, enum State *gameState, int *hours){
+    *currentEvent = *event;
+    *gameState = STATE_EVENT;
+    // se for um detour
+    if (event->type == EVENT_DETOUR) {
+        int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
+        *hours += hoursLost; // aplica horas perdidas
+        strcpy(currentEvent->message, TextFormat("%s Perdeu %d horas.", currentEvent->message, hoursLost)); //edita mensagem para falar quantas horas perdeu
+    }
+}
 
 typedef struct {
     int hours;
@@ -369,17 +379,9 @@ int main()
                 // eventos aleatorios
                 bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                 if (eventShouldHappen) {
-                    // sorteia evento
-                    currentEvent = events[GetRandomValue(0,10)];
 
-                    // se for um detour
-                    if (currentEvent.type == EVENT_DETOUR) {
-                        int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
-                        hours += hoursLost; // aplica horas perdidas
-                        strcpy(currentEvent.message, TextFormat("%s Perdeu %d horas.", currentEvent.message, hoursLost)); //edita mensagem para falar quantas horas perdeu
-                    }
+                    triggerEvent(&events[GetRandomValue(0,10)], &currentEvent, &gameState, &hours);
 
-                    gameState = STATE_EVENT;
                 }
             }
         }
@@ -441,7 +443,7 @@ int main()
                     {
                         if (GuiButton((Rectangle){200 + i*120,400,100,40}, currentEvent.options[i].message)) {
                             if (currentEvent.options[i].next != NULL) {
-                                currentEvent = *currentEvent.options[i].next;
+                                triggerEvent(currentEvent.options[i].next, &currentEvent, &gameState, &hours);
                             } else {
                                 gameState = STATE_PLAYING;
                             }
