@@ -40,6 +40,7 @@ int updateTimer(Timer *timer, double deltaTime){
 
 enum State {
     STATE_PLAYING,
+    STATE_STOP_CHECKPOINT,
     STATE_EVENT,
     STATE_GAMEOVER
 };
@@ -87,16 +88,14 @@ typedef struct {
 } Option;
 
 struct Event {
-    int id;
     char message[256];
     enum EventType type;
     int numOptions;
     Option options[4];
 };
 
-Event createEvent(int id, char *message, enum EventType type){
+Event createEvent(char *message, enum EventType type){
     Event event = {0};
-    event.id = id;
     strcpy(event.message, message);
     event.type = type;
     event.numOptions = 0;
@@ -117,12 +116,28 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
     *currentEvent = eventId;  // set new id
     *gameState = STATE_EVENT; // set gamestate
     
-    // se for um detour
     if (events[eventId].type == EVENT_DETOUR) {
         int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
         *hours += hoursLost; // aplica horas perdidas
+        //NOTE: isso aqui esta gerando um bug ao dar load multiplas vezes (Perdeu 6 horas.. Perdeu 7 horas...)
         strcpy(events[*currentEvent].message, TextFormat("%s Perdeu %d horas.", events[*currentEvent].message, hoursLost)); //edita mensagem para falar quantas horas perdeu
     }
+}
+
+#define MAX_CHECKPOINTS 32
+
+typedef struct {
+    int numTotal;
+    int numVisited;
+    float distance[MAX_CHECKPOINTS];
+    char  name[MAX_CHECKPOINTS][32];
+} Checkpoints;
+
+
+void addCheckpoint(Checkpoints *checkpoints, int distance, char* name){
+    checkpoints->distance[checkpoints->numTotal] = distance;
+    strcpy(checkpoints->name[checkpoints->numTotal], name);
+    checkpoints->numTotal++;
 }
 
 typedef struct {
@@ -130,34 +145,41 @@ typedef struct {
     float distance;
     enum State gameState;
     int currentEvent;
+    int checkpointsVisited;
     Party party;
 } GameData;
 
 int main()
 {
+    Checkpoints checkpoints = {0};
+    addCheckpoint(&checkpoints, 20, "Petrolina");
+    addCheckpoint(&checkpoints, 40, "Serra Talhada");
+    addCheckpoint(&checkpoints, 50, "Carnabeira da Penha");
+
     // creating event list
-    events[0] = createEvent(0, "Uma família de Urubus rodeia no céu.", EVENT_MESSAGE);
-    events[1] = createEvent(1, "Muita gente morreu nessa região.", EVENT_MESSAGE);
-    events[2] = createEvent(2, "Um rio seco.", EVENT_MESSAGE);
-    events[3] = createEvent(3, "Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE);
-    events[4] = createEvent(4, "Longo dia...", EVENT_MESSAGE);
-    events[5] = createEvent(5, "A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE);
-    events[6] = createEvent(6, "Passam um esqueleto de boi.", EVENT_MESSAGE);
-    events[7] = createEvent(7, "Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE);
-    events[8] = createEvent(8, "Passarinhos piam na distância.", EVENT_MESSAGE);
+    events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE);
+    events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE);
+    events[2] = createEvent("Um rio seco.", EVENT_MESSAGE);
+    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE);
+    events[4] = createEvent("Longo dia...", EVENT_MESSAGE);
+    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE);
+    events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE);
+    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE);
+    events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE);
     // type detour
-    events[9] = createEvent(9, "Pegou a estrada errada!", EVENT_DETOUR);
-    events[10] = createEvent(10, "Andaram em círculos...", EVENT_DETOUR);
+
+    events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR);
+    events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR);
   
     // eventEmptyHouse
     #define EMPTY_HOUSE       11
     #define EMPTY_HOUSE_ENTER 12
 
-    events[EMPTY_HOUSE] = createEvent(EMPTY_HOUSE, "Found empty house", EVENT_MESSAGE);
+    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE);
     addOption(&events[EMPTY_HOUSE], "Enter", EMPTY_HOUSE_ENTER);
     addOption(&events[EMPTY_HOUSE], "Go Away", -1);
 
-    events[EMPTY_HOUSE_ENTER] = createEvent(EMPTY_HOUSE_ENTER, "Nothing inside...", EVENT_MESSAGE);
+    events[EMPTY_HOUSE_ENTER] = createEvent("Nothing inside...", EVENT_MESSAGE);
 
     // eventFoundStranger
     #define FOUND_STRANGER       13
@@ -165,19 +187,19 @@ int main()
     #define STRANGER_SHORTCUT    15
     #define STRANGER_WRONG_ROAD  16
 
-    events[FOUND_STRANGER]      = createEvent(FOUND_STRANGER, "Um estranho chama sua atenção", EVENT_MESSAGE);
+    events[FOUND_STRANGER]      = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE);
     addOption(&events[FOUND_STRANGER], "Talk",     STRANGER_TALK);
     addOption(&events[FOUND_STRANGER], "Go Away",  -1);
     
-    events[STRANGER_TALK]       = createEvent(STRANGER_TALK, "Estão indo para o litoral?", EVENT_MESSAGE);
+    events[STRANGER_TALK]       = createEvent("Estão indo para o litoral?", EVENT_MESSAGE);
     addOption(&events[STRANGER_TALK], "Sim",           STRANGER_SHORTCUT);
     addOption(&events[STRANGER_TALK], "Não responder", -1);
 
-    events[STRANGER_SHORTCUT]   = createEvent(STRANGER_SHORTCUT, "Conheço um atalho!", EVENT_MESSAGE);
-    addOption(&events[STRANGER_SHORTCUT], "Seguir",        STRANGER_WRONG_ROAD);
+    events[STRANGER_SHORTCUT]   = createEvent("Conheço um atalho!", EVENT_MESSAGE);
+    addOption(&events[STRANGER_SHORTCUT], "Seguir",        9);
     addOption(&events[STRANGER_SHORTCUT], "Deixar pra lá", -1);
     
-    events[STRANGER_WRONG_ROAD] = createEvent(STRANGER_WRONG_ROAD, "Pegaram o caminho errado...", EVENT_DETOUR);
+    events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR);
 
     // setup gameplay data
     bool moving = false;
@@ -219,7 +241,6 @@ int main()
         party.inventory.food = 50;
         party.inventory.footwear = 4;
         party.ration = MEDIUM;
-        
     }
         
     const int windowWidth = 1200;
@@ -236,6 +257,7 @@ int main()
             hours = 0;
             distance = 0;
             gameState = STATE_PLAYING;
+            checkpoints.numVisited = 0;
             for (int i = 0; i < 4; i++)
             {
                 party.member[i].health = 100;
@@ -269,6 +291,7 @@ int main()
             data.gameState = gameState;
             data.currentEvent = currentEventId;
             data.party = party;
+            data.checkpointsVisited = checkpoints.numVisited;
 
             fwrite(&data, sizeof(GameData), 1, file);
             fclose(file);
@@ -291,6 +314,7 @@ int main()
                 gameState = data.gameState;
                 currentEventId = data.currentEvent;
                 party = data.party;
+                checkpoints.numVisited = data.checkpointsVisited;
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
                 fclose(file);
@@ -385,6 +409,11 @@ int main()
                     gameState = STATE_GAMEOVER;
                 }
 
+                if (distance >= checkpoints.distance[checkpoints.numVisited] && checkpoints.numVisited < checkpoints.numTotal) {
+                    distance = checkpoints.distance[checkpoints.numVisited];
+                    gameState = STATE_STOP_CHECKPOINT;
+                }
+
                 // eventos aleatorios
                 bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                 if (eventShouldHappen) {
@@ -399,12 +428,20 @@ int main()
         if(!moving && (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){
 
             switch (gameState) {
+
+                case STATE_STOP_CHECKPOINT:
+                    checkpoints.numVisited++;
+                    gameState = STATE_PLAYING;
+                    moving = true;
+                    break;
                 
                 case STATE_EVENT:
                     if (events[currentEventId].numOptions > 0) {
                         break;
                     }
                     gameState = STATE_PLAYING;
+                    moving = true;
+                    break;
                     
                 
                 case STATE_PLAYING:
@@ -461,6 +498,16 @@ int main()
             
                 }
                 
+            }
+
+            // Draw Checkpoint (temp)
+            if (gameState == STATE_STOP_CHECKPOINT) {
+                int size = 30;
+                int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
+                int x = windowWidth / 2 - width / 2;
+                int y =  windowHeight / 2;
+                DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
+                DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
             }
 
             // Moving?
