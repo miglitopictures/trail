@@ -151,12 +151,14 @@ typedef struct {
 
 int main()
 {
+    // add checkpoints
     Checkpoints checkpoints = {0};
     addCheckpoint(&checkpoints, 20, "Petrolina");
     addCheckpoint(&checkpoints, 40, "Serra Talhada");
     addCheckpoint(&checkpoints, 50, "Carnabeira da Penha");
 
     // creating event list
+    // type message
     events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE);
     events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE);
     events[2] = createEvent("Um rio seco.", EVENT_MESSAGE);
@@ -167,10 +169,8 @@ int main()
     events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE);
     events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE);
     // type detour
-
     events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR);
     events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR);
-  
     // eventEmptyHouse
     #define EMPTY_HOUSE       11
     #define EMPTY_HOUSE_ENTER 12
@@ -247,6 +247,8 @@ int main()
     const int windowHeight = 960;
 
     InitWindow(windowWidth, windowHeight, "Vidas Secas");
+    GuiLoadStyle("resources/styles/dark/style_dark.rgs");
+    GuiSetStyle(DEFAULT, TEXT_SIZE, 30);
 
     while (!WindowShouldClose())
     {
@@ -470,24 +472,25 @@ int main()
 
             // Draw Event
             if (gameState == STATE_EVENT) {
-                if (events[currentEventId].numOptions == 0) {
                     int size = 30;
                     int width = MeasureText(events[currentEventId].message, size);
                     int x = windowWidth / 2 - width / 2;
                     int y =  windowHeight / 2;
+                if (events[currentEventId].numOptions == 0) {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
                     DrawText(events[currentEventId].message, x, y, size, WHITE);
                 } else {
-                    int size = 30;
-                    int width = MeasureText(events[currentEventId].message, size);
-                    int x = windowWidth / 2 - width / 2;
-                    int y =  windowHeight / 2;
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
                     DrawText(events[currentEventId].message, x, y, size, WHITE);
 
+                    int opWidth = 200;
+                    int opGap = 20;
+                    int opTotalWidth = (events[currentEventId].numOptions - 1) * (opWidth + opGap) + opWidth;
+
                     for (int i = 0; i < events[currentEventId].numOptions; i++)
                     {
-                        if (GuiButton((Rectangle){200 + i*120,400,100,40}, events[currentEventId].options[i].message)) {
+                        
+                        if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),540,opWidth,40}, events[currentEventId].options[i].message)) {
                             if (events[currentEventId].options[i].nextId != -1) {
                                 triggerEvent(events[currentEventId].options[i].nextId, &currentEventId, &gameState, &hours);
                             } else {
