@@ -41,7 +41,7 @@ int updateTimer(Timer *timer, double deltaTime){
 enum State {
     STATE_PLAYING,
     STATE_STOP,
-    STATE_STOP_CHECKPOINT, //TODO(miguel): talvez mudar o nome para STATE_CHECKPOINT
+    STATE_STOP_CHECKPOINT, //TODO: talvez mudar o nome para STATE_CHECKPOINT
     STATE_EVENT,
     STATE_GAMEOVER
 };
@@ -172,8 +172,8 @@ typedef struct {
     Party party;
 } GameData;
 
-int main()
-{
+int main() {
+    //*___SETUP___*//
     // add checkpoints
     // (Inventory) {food, ammo, weapon, footwear}
     Checkpoints checkpoints = {0};
@@ -233,7 +233,7 @@ int main()
 
     int currentEventId; // id of current event
 
-    // stop menu glbals
+    // stop menu globals
     int activeStopMenu  =  0;
     int activeStopSubmenu = -1;
 
@@ -241,10 +241,8 @@ int main()
     Timer moveTimer;
     setTimer(&moveTimer, 0.7);
 
-    
-    // setup party
     Party party;
-    {
+    { // setup party
         party.count = 4;
         strcpy(party.member[0].name, "Fabiano");
         party.member[0].velocity = 5;
@@ -255,8 +253,7 @@ int main()
         strcpy(party.member[3].name, "Mais Velho");
         party.member[3].velocity = 6;
 
-        for (int i = 0; i < 4; i++)
-        {
+        for (int i = 0; i < 4; i++) {
             party.member[i].health = 100;
             party.member[i].energy = 100;
             party.member[i].sick = false;
@@ -279,18 +276,16 @@ int main()
     GuiLoadStyle("resources/styles/dark/style_dark.rgs");
     GuiSetStyle(DEFAULT, TEXT_SIZE, 30);
 
-    while (!WindowShouldClose())
-    {
+    while (!WindowShouldClose()) {
+        //*___UPDATE___*//
 
         // Restart
-        if (IsKeyPressed(KEY_R))
-        {
+        if (IsKeyPressed(KEY_R)) {
             hours = 0;
             distance = 0;
             gameState = STATE_PLAYING;
             checkpoints.numVisited = 0;
-            for (int i = 0; i < 4; i++)
-            {
+            for (int i = 0; i < 4; i++) {
                 party.member[i].health = 100;
                 party.member[i].energy = 100;
                 party.member[i].sick = false;
@@ -305,18 +300,15 @@ int main()
             party.ration = MEDIUM;
         }
 
-        if (IsKeyPressed(KEY_F))
-        {
+        if (IsKeyPressed(KEY_F)) {
             currentEventId = EMPTY_HOUSE;
         }
-        if (IsKeyPressed(KEY_G))
-        {
+        if (IsKeyPressed(KEY_G)) {
             currentEventId = FOUND_STRANGER;
         }
 
         // Save Game
-        if (IsKeyPressed(KEY_S))
-        {
+        if (IsKeyPressed(KEY_S)) {
             FILE *file = fopen("./saves/save01.vd", "wb");
 
             if (file == NULL) break;
@@ -334,8 +326,7 @@ int main()
         }
 
         // Load Game
-        if (IsKeyPressed(KEY_L))
-        {
+        if (IsKeyPressed(KEY_L)) {
             FILE *file = fopen("./saves/save01.vd", "rb");
             if (file == NULL) break;
 
@@ -483,7 +474,7 @@ int main()
             }
         }       
 
-        /* draw */
+        //*___DRAW___*//
         BeginDrawing();
 
             ClearBackground(BLACK);
@@ -535,15 +526,15 @@ int main()
                 int height = 60;
                 int width = 200;
                 int margin = 60;
-                if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop"))
-                {
+                if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop")) {
                     gameState = STATE_STOP;
                     activeStopMenu = 0;
                 }
             }
             
             if (gameState == STATE_PLAYING || gameState == STATE_EVENT) {// Moving?
-                {
+                
+                { // Draw action text -- "Moving" : "Enter to continue"
                     int size = 30;
                     char *text = moving ? "Moving" : "Enter to continue";
                     int width = MeasureText(text, size);
@@ -552,8 +543,8 @@ int main()
                     DrawText(text, x, y , size, WHITE);
                 }
 
-                // Draw Hours, Distance, Food, Party Count
-                {
+                
+                { // Draw Hours, Distance, Food, Party Count
                     int size = 30;
                     DrawText(TextFormat("Horas: %02d", hours),             30,  30, size, WHITE);
                     DrawText(TextFormat("Distância: %.2fKm", distance),    30,  60, size, WHITE);
@@ -604,8 +595,7 @@ int main()
                         moving = false;
                     }
 
-                    switch (activeStopMenu)
-                    {
+                    switch (activeStopMenu) {
                     case 0 /* Party */:  
                         if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&party, &hours);
                         // Draw status bar (party health)
