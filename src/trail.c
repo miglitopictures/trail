@@ -41,7 +41,7 @@ int updateTimer(Timer *timer, double deltaTime){
 enum State {
     STATE_PLAYING,
     STATE_STOP,
-    STATE_STOP_CHECKPOINT, //NOTE(miguel): talvez mudar o nome para STATE_CHECKPOINT
+    STATE_STOP_CHECKPOINT, //TODO(miguel): talvez mudar o nome para STATE_CHECKPOINT
     STATE_EVENT,
     STATE_GAMEOVER
 };
@@ -54,7 +54,6 @@ typedef struct {
     int energy;
     float velocity;
 } Person;
-
 
 typedef struct {
     int food;
@@ -87,7 +86,7 @@ typedef struct {
 } Party;
 
 void rest(Party *party, int *hours){
-    // NOTE(miguel): talvez implementar perda de ocmida durante o descanço
+    // TODO: talvez implementar perda de comida durante o descanço
     for (int i = 0; i < 4; i++){
         if (party->member[i].dead) continue;
         party->member[i].health += GetRandomValue(0,3);
@@ -142,7 +141,7 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
     if (events[eventId].type == EVENT_DETOUR) {
         int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
         *hours += hoursLost; // aplica horas perdidas
-        //NOTE: isso aqui esta gerando um bug ao dar load multiplas vezes (Perdeu 6 horas.. Perdeu 7 horas...)
+        // TODO: isso aqui esta gerando um bug ao dar load multiplas vezes (Perdeu 6 horas.. Perdeu 7 horas...)
         strcpy(events[*currentEvent].message, TextFormat("%s Perdeu %d horas.", events[*currentEvent].message, hoursLost)); //edita mensagem para falar quantas horas perdeu
     }
 }
@@ -156,7 +155,6 @@ typedef struct {
     float distance[MAX_CHECKPOINTS];
     char  name[MAX_CHECKPOINTS][32];
 } Checkpoints;
-
 
 void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory inventory){
     checkpoints->distance[checkpoints->numTotal] = distance;
@@ -376,7 +374,7 @@ int main()
                 int hoursSimulated = 3;
 
                 party.count = 0;
-                for (int i = 0; i < 4; i++){
+                for (int i = 0; i < 4; i++) {
 
                     if (party.member[i].dead) continue;
 
@@ -435,8 +433,7 @@ int main()
 
 
                 // check gameover
-                if (party.count == 0)
-                {
+                if (party.count == 0) {
                     gameState = STATE_GAMEOVER;
                 }
 
@@ -457,7 +454,7 @@ int main()
         }
         
         // Enter
-        if(!moving && (IsKeyPressed(KEY_ENTER))){
+        if (!moving && (IsKeyPressed(KEY_ENTER))) {
 
             switch (gameState) {
 
@@ -484,9 +481,7 @@ int main()
                 default:
                     break;
             }
-        }
-
-        
+        }       
 
         /* draw */
         BeginDrawing();
@@ -546,11 +541,8 @@ int main()
                     activeStopMenu = 0;
                 }
             }
-
-
             
-            if (gameState == STATE_PLAYING || gameState == STATE_EVENT)
-            {// Moving?
+            if (gameState == STATE_PLAYING || gameState == STATE_EVENT) {// Moving?
                 {
                     int size = 30;
                     char *text = moving ? "Moving" : "Enter to continue";
@@ -572,17 +564,16 @@ int main()
 
 
                 // Draw status bar (party health)
-                for (int i = 3; i >= 0; i--)
-                {
+                for (int i = 3; i >= 0; i--) {
                     int size = 30;
                     int posY = windowHeight - 50 - ((3-i)*30);
                     Color textColor = party.member[i].health == 0 ? RED : WHITE;
                     DrawText(party.member[i].name, 30, posY, 30, textColor);
                     DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
-                    if (party.member[i].health == 0){
+                    if (party.member[i].health == 0) {
                         DrawText("(dead)", 310, posY, 30, textColor);
                         
-                    } else if (party.member[i].sick){
+                    } else if (party.member[i].sick) {
                         DrawText("(sick)", 310, posY, 30, textColor);
                         
                     }
@@ -590,14 +581,10 @@ int main()
                 }
             }
 
-
-            // Draw Checkpoint (temp)
-            
-
             // Stop Menu
             bool inCheckpoint = (gameState == STATE_STOP_CHECKPOINT);
 
-            if (gameState == STATE_STOP || inCheckpoint){
+            if (gameState == STATE_STOP || inCheckpoint) {
                 int height = 60;
                 int width = 200;
                 #define SUBMENU_NONE -1
@@ -619,28 +606,26 @@ int main()
 
                     switch (activeStopMenu)
                     {
-                    // depending on the button clicked within the active option,  i want to enter a button specific "submenu", is there a way to do this without sabing a state? more imideate mode
                     case 0 /* Party */:  
                         if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&party, &hours);
                         // Draw status bar (party health)
-                        for (int i = 3; i >= 0; i--)
-                        {
+                        for (int i = 3; i >= 0; i--) {
                             int size = 30;
                             int posY = windowHeight - 120 - ((3-i)*30);
                             Color textColor = party.member[i].health == 0 ? RED : WHITE;
                             DrawText(party.member[i].name, 30, posY, 30, textColor);
                             DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
+
                             if (party.member[i].health == 0){
                                 DrawText("(dead)", 310, posY, 30, textColor);
-                                
-                            } else if (party.member[i].sick){
+                            } else if (party.member[i].sick) {
                                 DrawText("(sick)", 310, posY, 30, textColor);
-                                
                             }
+
                             DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
                         }
-                        // Draw Hours, Distance, Food, Party Count
-                        {
+                        
+                        { // Draw Hours, Distance, Food, Party Count
                             int size = 30;
                             DrawText(TextFormat("Horas: %02d", hours),             30,  230, size, WHITE);
                             DrawText(TextFormat("Food: %d", party.inventory.food), 30,  260, size, WHITE);
@@ -658,8 +643,8 @@ int main()
                         GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
                         break;
                     case 3 /* Town */:  
-                        // Draw city
-                        {
+                        
+                        { // Draw city
                             int size = 30;
                             int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
                             int x = windowWidth / 2 - width / 2;
@@ -674,8 +659,7 @@ int main()
                         break;
                     }
                 }
-                else if (activeStopSubmenu == SUBMENU_BUY)
-                {
+                else if (activeStopSubmenu == SUBMENU_BUY) {
                     
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
@@ -690,16 +674,11 @@ int main()
                     DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[checkpoints.numVisited].footwear),   60, 160, 30, WHITE);
                     if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].footwear, &party.inventory.footwear, 10, &party.money);
                 }
-                else if (activeStopSubmenu == SUBMENU_SELL)
-                {
+                else if (activeStopSubmenu == SUBMENU_SELL) {
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
                 }
-                
-                
-            }   
-
-
+            }
         EndDrawing();
     }
 
