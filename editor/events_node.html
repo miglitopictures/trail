@@ -194,6 +194,22 @@
   .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 50; }
   .copied-toast { position: fixed; bottom: 24px; right: 444px; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 1000; }
   .copied-toast.show { opacity: 1; }
+
+  /* ── ROUTER NODES ── */
+  .router-node {
+    position: absolute;
+    width: 14px; height: 14px;
+    background: var(--panel);
+    border: 2px solid var(--muted);
+    border-radius: 3px;
+    transform: rotate(45deg) translate(-50%, -50%);
+    transform-origin: 0 0;
+    z-index: 6;
+    cursor: move;
+    transition: border-color 0.1s, background 0.1s, box-shadow 0.1s;
+  }
+  .router-node:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .router-node.router-selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 0 3px rgba(0,122,255,0.3); }
 </style>
 </head>
 <body>
@@ -216,6 +232,7 @@
   <div class="canvas-actions">
     <button class="btn btn-primary" onclick="newEvent()">+ Add Story Node</button>
     <button class="btn" onclick="resetView()">Center View</button>
+    <span style="font-size:11px; color: var(--muted); align-self: center; padding-left: 4px;">Ctrl+click a connection to add a router</span>
   </div>
 </div>
 
@@ -272,10 +289,12 @@ const EVENT_TYPES = {
 let events = [];
 let selectedIdx = null;
 let selectedLink = null; // { nodeIdx, optionIdx }
+let selectedRouter = null; // { nodeIdx, optionIdx, routerIdx }
 let panX = 40, panY = 40;
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let activeLinkDrag = null; // { fromNodeIdx, optionIdx, startX, startY, currentX, currentY }
+let draggingRouter = null; // { nodeIdx, optionIdx, routerIdx, offsetX, offsetY }
 
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
@@ -443,10 +462,62 @@ function renderCanvas() {
   drawConnections();
 }
 
+// ── ROUTER PATH BUILDER ──
+// Builds a smooth path string through: start → [routers] → end
+// Uses short bezier segments between consecutive points
+function buildPathWithRouters(startX, startY, endX, endY, routers) {
+  if (!routers || routers.length === 0) {
+    const cp1X = startX + 70, cp1Y = startY;
+    const cp2X = endX   - 70, cp2Y = endY;
+    return `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+  }
+
+  // Build full point list
+  const pts = [{ x: startX, y: startY }, ...routers, { x: endX, y: endY }];
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let k = 0; k < pts.length - 1; k++) {
+    const p0 = pts[k], p1 = pts[k + 1];
+    const dx = p1.x - p0.x;
+    // Control point offset: 40% of x-distance or 60px minimum for visually nice curves
+    const pull = Math.max(60, Math.abs(dx) * 0.4);
+    const cp1x = p0.x + pull, cp1y = p0.y;
+    const cp2x = p1.x - pull, cp2y = p1.y;
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p1.x} ${p1.y}`;
+  }
+  return d;
+}
+
+// Given a t ∈ [0,1] along a cubic bezier, return the point
+function cubicBezierPoint(p0, p1, p2, p3, t) {
+  const mt = 1 - t;
+  return {
+    x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
+    y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
+  };
+}
+
+// Find approximate point at parameter t along the full multi-segment path
+function getPointOnPath(startX, startY, endX, endY, routers, t) {
+  const pts = [{ x: startX, y: startY }, ...(routers || []), { x: endX, y: endY }];
+  const segCount = pts.length - 1;
+  const segT = t * segCount;
+  const segIdx = Math.min(Math.floor(segT), segCount - 1);
+  const localT = segT - segIdx;
+  const p0 = pts[segIdx], p1 = pts[segIdx + 1];
+  const dx = p1.x - p0.x;
+  const pull = Math.max(60, Math.abs(dx) * 0.4);
+  const cp1 = { x: p0.x + pull, y: p0.y };
+  const cp2 = { x: p1.x - pull, y: p1.y };
+  return cubicBezierPoint(p0, cp1, cp2, p1, localT);
+}
+
 function drawConnections() {
   const svg = document.getElementById('svg-layer');
   svg.innerHTML = '';
   const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+  const nodesLayer = document.getElementById('nodes-layer');
+  // Remove old router DOM elements
+  nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
 
   events.forEach((ev, i) => {
     if (!ev.options) return;
@@ -466,36 +537,96 @@ function drawConnections() {
       const endX   = aRect.left + aRect.width  / 2 - canvasRect.left;
       const endY   = aRect.top  + aRect.height / 2 - canvasRect.top;
 
-      const cp1X = startX + 70, cp1Y = startY;
-      const cp2X = endX   - 70, cp2Y = endY;
+      if (!opt.routers) opt.routers = [];
+      const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
 
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('class', 'svg-link-group');
-      const pathString = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
-      
+
       const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       hitPath.setAttribute('d', pathString);
       hitPath.setAttribute('class', 'svg-link-hitbox');
-      
+
       const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       visPath.setAttribute('d', pathString);
       visPath.setAttribute('class', 'svg-link-visible');
-      
+
       const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
       const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
-      
+
       visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
       visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
-      
+
       group.appendChild(hitPath);
       group.appendChild(visPath);
 
-      group.onmousedown = (e) => {
+      // ── CTRL+CLICK ON CONNECTION → Insert router at click position ──
+      group.addEventListener('click', (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.stopPropagation();
+        e.preventDefault();
+        // Find click position in canvas space
+        const clickX = e.clientX - canvasRect.left;
+        const clickY = e.clientY - canvasRect.top;
+        // Insert router at click point (in canvas coords, adjusted for pan/scale)
+        if (!opt.routers) opt.routers = [];
+        // Find insertion index: sort by proximity to existing path parameter
+        // Simple approach: insert at best position to maintain path order
+        const newPt = { x: clickX, y: clickY };
+        // Find which segment we're closest to for insertion order
+        const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
+        let bestSegIdx = 0, bestDist = Infinity;
+        for (let k = 0; k < allPts.length - 1; k++) {
+          const mid = { x: (allPts[k].x + allPts[k+1].x)/2, y: (allPts[k].y + allPts[k+1].y)/2 };
+          const d = Math.hypot(clickX - mid.x, clickY - mid.y);
+          if (d < bestDist) { bestDist = d; bestSegIdx = k; }
+        }
+        opt.routers.splice(bestSegIdx, 0, newPt);
+        drawConnections();
+      });
+
+      group.addEventListener('mousedown', (e) => {
+        if (e.ctrlKey || e.metaKey) return;
         e.stopPropagation();
         selectedLink = { nodeIdx: i, optionIdx: optIdx };
-        selectEvent(null); // Clear node selection securely
-      };
+        selectedRouter = null;
+        selectEvent(null);
+      });
+
       svg.appendChild(group);
+
+      // ── RENDER ROUTER DIAMONDS as DOM elements (for easy drag) ──
+      opt.routers.forEach((router, routerIdx) => {
+        const isSelRouter = selectedRouter &&
+          selectedRouter.nodeIdx === i &&
+          selectedRouter.optionIdx === optIdx &&
+          selectedRouter.routerIdx === routerIdx;
+
+        const rdiv = document.createElement('div');
+        rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
+        // Position: center of diamond at router coords
+        rdiv.style.left = `${router.x}px`;
+        rdiv.style.top = `${router.y}px`;
+        rdiv.setAttribute('data-node-idx', i);
+        rdiv.setAttribute('data-opt-idx', optIdx);
+        rdiv.setAttribute('data-router-idx', routerIdx);
+
+        rdiv.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          selectedRouter = { nodeIdx: i, optionIdx: optIdx, routerIdx };
+          selectedLink = null;
+          selectEvent(null);
+          draggingRouter = {
+            nodeIdx: i, optionIdx: optIdx, routerIdx,
+            offsetX: e.clientX - router.x,
+            offsetY: e.clientY - router.y
+          };
+          drawConnections();
+        });
+
+        nodesLayer.appendChild(rdiv);
+      });
     });
   });
 
@@ -525,6 +656,7 @@ function onCanvasMouseDown(e) {
     startPanX = e.clientX - panX;
     startPanY = e.clientY - panY;
     selectedLink = null;
+    selectedRouter = null;
     selectEvent(null); // Just un-focuses UI, does not destroy DOM
   }
 }
@@ -550,6 +682,7 @@ function onNodeMouseDown(e, idx) {
   if (e.target.classList.contains('node-output-handle')) return; 
   e.stopPropagation();
   selectedLink = null;
+  selectedRouter = null;
   selectEvent(idx);
   
   draggingNodeIdx = idx;
@@ -560,7 +693,12 @@ function onNodeMouseDown(e, idx) {
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (selectedLink) {
+    if (selectedRouter) {
+      const { nodeIdx, optionIdx, routerIdx } = selectedRouter;
+      events[nodeIdx].options[optionIdx].routers.splice(routerIdx, 1);
+      selectedRouter = null;
+      drawConnections();
+    } else if (selectedLink) {
       events[selectedLink.nodeIdx].options[selectedLink.optionIdx].nextId = -1;
       selectedLink = null;
       renderCanvas(); generateCode();
@@ -587,6 +725,20 @@ window.onmousemove = (e) => {
   if (isPanning) {
     panX = e.clientX - startPanX; panY = e.clientY - startPanY;
     updateCanvasTransform();
+  } else if (draggingRouter !== null) {
+    const { nodeIdx, optionIdx, routerIdx, offsetX, offsetY } = draggingRouter;
+    const opt = events[nodeIdx].options[optionIdx];
+    if (opt && opt.routers && opt.routers[routerIdx]) {
+      opt.routers[routerIdx].x = e.clientX - offsetX;
+      opt.routers[routerIdx].y = e.clientY - offsetY;
+      // Surgically move the router DOM element
+      const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
+      if (rdiv) {
+        rdiv.style.left = `${opt.routers[routerIdx].x}px`;
+        rdiv.style.top = `${opt.routers[routerIdx].y}px`;
+      }
+      drawConnections();
+    }
   } else if (draggingNodeIdx !== null) {
     events[draggingNodeIdx].x = e.clientX - dragOffsetX;
     events[draggingNodeIdx].y = e.clientY - dragOffsetY;
@@ -624,7 +776,7 @@ window.onmousemove = (e) => {
 };
 
 window.onmouseup = (e) => {
-  isPanning = false; draggingNodeIdx = null;
+  isPanning = false; draggingNodeIdx = null; draggingRouter = null;
   if (activeLinkDrag) {
     let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
