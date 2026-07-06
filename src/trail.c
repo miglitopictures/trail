@@ -63,6 +63,13 @@ typedef struct {
     int footwear;
 } Inventory;
 
+int buy(int *iten, int price, int *wallet){
+    if (*wallet < price) return 0;
+    *wallet -= price;
+    *iten -= 1;
+    return 1;
+}
+
 enum RationSize {
     SMALL  = 1,
     MEDIUM = 2,
@@ -71,6 +78,7 @@ enum RationSize {
 
 typedef struct {
     int count;
+    int money;
     Person member[4];
     Inventory inventory;
     enum RationSize ration;
@@ -130,13 +138,15 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
 typedef struct {
     int numTotal;
     int numVisited;
+    Inventory Inventory[MAX_CHECKPOINTS];
     float distance[MAX_CHECKPOINTS];
     char  name[MAX_CHECKPOINTS][32];
 } Checkpoints;
 
 
-void addCheckpoint(Checkpoints *checkpoints, int distance, char* name){
+void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory inventory){
     checkpoints->distance[checkpoints->numTotal] = distance;
+    checkpoints->Inventory[checkpoints->numTotal] = inventory;
     strcpy(checkpoints->name[checkpoints->numTotal], name);
     checkpoints->numTotal++;
 }
@@ -153,10 +163,11 @@ typedef struct {
 int main()
 {
     // add checkpoints
+    // (Inventory) {food, ammo, weapon, footwear}
     Checkpoints checkpoints = {0};
-    addCheckpoint(&checkpoints, 20, "Petrolina");
-    addCheckpoint(&checkpoints, 40, "Serra Talhada");
-    addCheckpoint(&checkpoints, 50, "Carnabeira da Penha");
+    addCheckpoint(&checkpoints, "Petrolina",           30, (Inventory){50, 200,  10, 40});
+    addCheckpoint(&checkpoints, "Serra Talhada",       50, (Inventory){50, 200,  10, 10});
+    addCheckpoint(&checkpoints, "Carnabeira da Penha", 80, (Inventory){15, 249, 100, 23});
 
     // creating event list
     // type message
@@ -216,7 +227,7 @@ int main()
 
     // move timer
     Timer moveTimer;
-    setTimer(&moveTimer, 0.3);
+    setTimer(&moveTimer, 0.7);
 
     
     // setup party
@@ -245,6 +256,7 @@ int main()
         party.inventory.weapon = 1;
         party.inventory.food = 50;
         party.inventory.footwear = 4;
+        party.money = 70;
         party.ration = MEDIUM;
     }
         
@@ -273,7 +285,12 @@ int main()
                 party.member[i].dead = false;
             }
             party.count = 4;
+            party.inventory.ammo = 10;
+            party.inventory.weapon = 1;
             party.inventory.food = 50;
+            party.inventory.footwear = 4;
+            party.money = 70;
+            party.ration = MEDIUM;
         }
 
         if (IsKeyPressed(KEY_F))
@@ -534,10 +551,11 @@ int main()
                 // Draw Hours, Distance, Food, Party Count
                 {
                     int size = 30;
-                    DrawText(TextFormat("Horas: %02d", hours), 30, 30, size, WHITE);
-                    DrawText(TextFormat("Distância: %.2fKm", distance), 30, 60, size, WHITE);
-                    DrawText(TextFormat("Food: %d", party.inventory.food), 30, 90, size, WHITE);
-                    DrawText(TextFormat("Alive: %d", party.count), 30, 120, size, WHITE);
+                    DrawText(TextFormat("Horas: %02d", hours),             30,  30, size, WHITE);
+                    DrawText(TextFormat("Distância: %.2fKm", distance),    30,  60, size, WHITE);
+                    DrawText(TextFormat("Food: %d", party.inventory.food), 30,  90, size, WHITE);
+                    DrawText(TextFormat("Alive: %d", party.count),         30, 120, size, WHITE);
+                    DrawText(TextFormat("Money: %d", party.money),         30, 150, size, WHITE);
                 }
 
 
@@ -562,14 +580,7 @@ int main()
 
 
             // Draw Checkpoint (temp)
-            if (gameState == STATE_STOP_CHECKPOINT) {
-                int size = 30;
-                int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
-                int x = windowWidth / 2 - width / 2;
-                int y =  windowHeight / 2;
-                DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
-                DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
-            }
+            
 
             // Stop Menu
             bool inCheckpoint = (gameState == STATE_STOP_CHECKPOINT);
@@ -581,6 +592,18 @@ int main()
                 #define SUBMENU_BUY   0
                 #define SUBMENU_SELL  1
                 if (activeSubMenu == SUBMENU_NONE) {
+
+                    // Draw city
+                    if (gameState == STATE_STOP_CHECKPOINT)
+                    {
+                        int size = 30;
+                        int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
+                        int x = windowWidth / 2 - width / 2;
+                        int y =  windowHeight / 2;
+                        DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
+                        DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
+                    }
+
                     const char* options = inCheckpoint? "Party;Car;Supply;Town" : "Party;Car;Supply";  
                     GuiToggleGroup((Rectangle){ 0,  windowHeight - height, width, height }, options, &activeOption);
                     
@@ -616,11 +639,25 @@ int main()
                     default:
                         break;
                     }
-                } else if (activeSubMenu == SUBMENU_BUY)  {
+                }
+                else if (activeSubMenu == SUBMENU_BUY)
+                {
+                    
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
+                    DrawText(TextFormat("Money: %d", party.money), 30, windowHeight - 60, 30, WHITE);
+                    // (Inventory) {food, ammo, weapon, footwear}
+                    DrawText(TextFormat("FOOD:  %03d", checkpoints.Inventory[checkpoints.numVisited].food),       60,  40, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].food, 5, &party.money);
+                    DrawText(TextFormat("AMMO:  %03d", checkpoints.Inventory[checkpoints.numVisited].ammo),       60,  80, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].ammo, 5, &party.money);
+                    DrawText(TextFormat("GUNS:  %03d", checkpoints.Inventory[checkpoints.numVisited].weapon),     60, 120, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].weapon, 10, &party.money);
+                    DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[checkpoints.numVisited].footwear),   60, 160, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].footwear, 10, &party.money);
                 }
-                else if (activeSubMenu == SUBMENU_SELL) {
+                else if (activeSubMenu == SUBMENU_SELL)
+                {
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
                 } 
