@@ -80,8 +80,30 @@
     position: absolute;
     top: 0; left: 0;
     width: 20000px; height: 20000px;
-    pointer-events: none;
+    pointer-events: none; /* Let container handle pans */
     z-index: 1;
+  }
+  
+/* Connection Groups & Hitboxes */
+  .svg-link-group {
+    cursor: pointer;
+  }
+  .svg-link-hitbox {
+    stroke: transparent;
+    stroke-width: 25px; /* Increase this to make the hit area larger */
+    fill: none;
+    pointer-events: stroke;
+  }
+  .svg-link-visible {
+    fill: none;
+    pointer-events: none; /* Let the hitbox catch the events */
+    transition: stroke-width 0.1s, stroke 0.1s;
+  }
+  
+  /* When hovering the transparent hitbox, highlight the visible line */
+  .svg-link-group:hover .svg-link-visible {
+    stroke-width: 4px !important;
+    stroke: var(--danger) !important;
   }
 
   /* ── NODES ── */
@@ -128,8 +150,22 @@
   .node-options { border-top: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(0,0,0,0.1); border-radius: 0 0 12px 12px; overflow: hidden; }
   .node-opt-row { position: relative; padding: 8px 28px 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 4px; }
   .node-opt-row:last-child { border-bottom: none; }
-  .node-opt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .node-opt-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; cursor: text; }
+  .node-opt-text:hover { color: var(--text); }
   
+  .node-add-option {
+    padding: 8px; font-size: 11px; font-weight: 600; color: var(--muted);
+    text-align: center; cursor: pointer; border-top: 1px solid var(--border);
+    background: rgba(255,255,255,0.02); transition: background 0.15s, color 0.15s;
+  }
+  .node-add-option:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+
+  .inline-edit-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
+    font-size: 11.5px; font-family: var(--sans); padding: 2px 4px; border-radius: 4px;
+    outline: none; margin: -2px 4px -2px -4px; width: 100%;
+  }
+
   .node-output-handle {
     position: absolute;
     right: -6px;
@@ -280,6 +316,7 @@ const EVENT_TYPES = {
 
 let events = [];
 let selectedIdx = null;
+let selectedLink = null; // { nodeIdx, optionIdx }
 
 // Infinite Grid Canvas Core Offsets Matrices variables tracking mechanisms
 let panX = 40, panY = 40;
@@ -331,10 +368,10 @@ function renderCanvas() {
     div.appendChild(nBody);
 
     // Options Branch Rendering Rows Stack with Connection Handles
+    const optsCont = document.createElement('div');
+    optsCont.className = 'node-options';
+    
     if (ev.options && ev.options.length > 0) {
-      const optsCont = document.createElement('div');
-      optsCont.className = 'node-options';
-      
       ev.options.forEach((opt, optIdx) => {
         const optRow = document.createElement('div');
         optRow.className = 'node-opt-row';
@@ -342,6 +379,26 @@ function renderCanvas() {
         const optTxt = document.createElement('span');
         optTxt.className = 'node-opt-text';
         optTxt.textContent = `${optIdx + 1}. ${opt.message || 'Option'}`;
+        optTxt.title = "Double click to edit";
+
+        // Double Click to Edit Inline
+        optTxt.ondblclick = (e) => {
+          e.stopPropagation();
+          const input = document.createElement('input');
+          input.className = 'inline-edit-input';
+          input.value = opt.message;
+          
+          input.onmousedown = (evMousedown) => evMousedown.stopPropagation(); // prevent drag
+          input.onblur = () => {
+            updateOption(i, optIdx, 'message', input.value);
+          };
+          input.onkeydown = (ke) => {
+            if (ke.key === 'Enter') input.blur();
+          };
+          
+          optRow.replaceChild(input, optTxt);
+          input.focus();
+        };
         
         const nextLbl = document.createElement('span');
         nextLbl.style.fontSize = '9px';
@@ -369,9 +426,23 @@ function renderCanvas() {
         optRow.appendChild(outHandle);
         optsCont.appendChild(optRow);
       });
-      div.appendChild(optsCont);
+    }
+
+    // Add Option (+) button in the UI
+    if (!ev.options || ev.options.length < 4) {
+      const addBtn = document.createElement('div');
+      addBtn.className = 'node-add-option';
+      addBtn.textContent = '+ Add Option Branch';
+      addBtn.onmousedown = (e) => {
+        e.stopPropagation();
+        if (!events[i].options) events[i].options = [];
+        events[i].options.push({ message: 'New Option', nextId: -1 });
+        selectEvent(i); // selects the node, triggers re-renders
+      };
+      optsCont.appendChild(addBtn);
     }
     
+    div.appendChild(optsCont);
     div.onmousedown = (e) => onNodeMouseDown(e, i);
     container.appendChild(div);
   });
@@ -390,12 +461,10 @@ function drawConnections() {
     ev.options.forEach((opt, optIdx) => {
       if (opt.nextId === -1 || !events[opt.nextId]) return;
 
-      // Find the actual handle element in the DOM
       const nodeEl = document.querySelector(`[data-idx="${i}"]`);
       const handles = nodeEl?.querySelectorAll('.node-output-handle');
       const handle = handles?.[optIdx];
       
-      // Find target node's input anchor
       const targetEl = document.querySelector(`[data-idx="${opt.nextId}"]`);
       const anchor = targetEl?.querySelector('.node-input-anchor');
 
@@ -404,7 +473,6 @@ function drawConnections() {
       const hRect = handle.getBoundingClientRect();
       const aRect = anchor.getBoundingClientRect();
 
-      // Convert to canvas-local coordinates
       const startX = hRect.left + hRect.width / 2 - canvasRect.left;
       const startY = hRect.top  + hRect.height / 2 - canvasRect.top;
       const endX   = aRect.left + aRect.width  / 2 - canvasRect.left;
@@ -413,19 +481,46 @@ function drawConnections() {
       const cp1X = startX + 70, cp1Y = startY;
       const cp2X = endX   - 70, cp2Y = endY;
 
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`);
-      const isSelected = (i === selectedIdx || opt.nextId === selectedIdx);
-      path.setAttribute('stroke', isSelected ? '#007aff' : 'rgba(255,255,255,0.15)');
-      path.setAttribute('stroke-width', isSelected ? '2.5' : '1.5');
-      path.setAttribute('fill', 'none');
-      svg.appendChild(path);
+      // Create an SVG Group
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('class', 'svg-link-group');
+
+      const pathString = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+
+      // 1. Invisible Hitbox Path
+      const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hitPath.setAttribute('d', pathString);
+      hitPath.setAttribute('class', 'svg-link-hitbox');
+
+      // 2. Visible Line Path
+      const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      visPath.setAttribute('d', pathString);
+      visPath.setAttribute('class', 'svg-link-visible');
+      
+      const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
+      const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
+      
+      visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
+      visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
+      
+      // Append paths to the group
+      group.appendChild(hitPath);
+      group.appendChild(visPath);
+
+      // Select connection when the group (specifically the hitbox) is clicked
+      group.onmousedown = (e) => {
+        e.stopPropagation();
+        selectedLink = { nodeIdx: i, optionIdx: optIdx };
+        selectedIdx = null; 
+        renderCanvas();
+        renderForm();
+      };
+      
+      svg.appendChild(group);
     });
   });
 
-  // keep the drag preview noodle unchanged...
-
-  // Render temporary dynamic line path currently tracking mouse drag movements operations definitions
+  // Render temporary dynamic line path during dragging
   if (activeLinkDrag) {
     const cp1X = activeLinkDrag.startX + 70;
     const cp1Y = activeLinkDrag.startY;
@@ -452,34 +547,55 @@ function onCanvasMouseDown(e) {
     isPanning = true;
     startPanX = e.clientX - panX;
     startPanY = e.clientY - panY;
+    
+    // Clear selection models
+    selectedLink = null;
+    selectedIdx = null;
+    renderCanvas();
+    renderForm();
   }
 }
 
 function onNodeMouseDown(e, idx) {
   if (e.target.classList.contains('node-output-handle')) return; 
   e.stopPropagation();
+  selectedLink = null;
   selectEvent(idx);
   draggingNodeIdx = idx;
   dragOffsetX = e.clientX - events[idx].x;
   dragOffsetY = e.clientY - events[idx].y;
 }
 
-// ── REPLACED INTERACTION CONTROLS MATRIX FOR PERFECT NOODLE SNAPPING ──
+// Global Keyboard Listeners (Hotkeys for Deletion)
+window.addEventListener('keydown', (e) => {
+  // Prevent executing hotkeys while user is typing in text fields
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedLink) {
+      // 1. Delete Link Connection
+      events[selectedLink.nodeIdx].options[selectedLink.optionIdx].nextId = -1;
+      selectedLink = null;
+      renderCanvas();
+      generateCode();
+    } else if (selectedIdx !== null) {
+      // 2. Delete Selected Node
+      deleteEvent();
+    }
+  }
+});
 
 function onHandleMouseDown(e, nodeIdx, optionIdx) {
   e.stopPropagation();
   e.preventDefault();
   
-  // 1. Get the canvas position to use as our local root tracking zero-point
   const canvasEl = document.getElementById('canvas');
   const canvasRect = canvasEl.getBoundingClientRect();
   
-  // 2. Find EXACTLY where the clicked circular handle is relative to the canvas coordinate plane
   const handleRect = e.target.getBoundingClientRect();
   const sX = handleRect.left + (handleRect.width / 2) - canvasRect.left;
   const sY = handleRect.top + (handleRect.height / 2) - canvasRect.top;
 
-  // 3. Transform client cursor bounds down into local infinite workspace space perfectly
   const cX = e.clientX - canvasRect.left;
   const cY = e.clientY - canvasRect.top;
 
@@ -503,12 +619,10 @@ window.onmousemove = (e) => {
     events[draggingNodeIdx].y = e.clientY - dragOffsetY;
     renderCanvas();
   } else if (activeLinkDrag) {
-    // FIX: Map mouse tracking bounds explicitly to the canvas rect to automatically remove header height anomalies
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
     activeLinkDrag.currentX = e.clientX - canvasRect.left;
     activeLinkDrag.currentY = e.clientY - canvasRect.top;
     
-    // Hit test detection processing against nodes layer components boundaries
     targetHoverNodeIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     for (let el of elements) {
@@ -531,10 +645,8 @@ window.onmouseup = () => {
   
   if (activeLinkDrag) {
     if (targetHoverNodeIdx !== null) {
-      // Connect option branch safely link to target indices reference map points updates definitions
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = targetHoverNodeIdx;
     } else {
-      // Drop line into empty workspace grounds safely snaps link vector back into terminating layout parameters rules models
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = -1;
     }
     activeLinkDrag = null;
@@ -606,12 +718,12 @@ function renderOptions() {
     card.innerHTML = `
       <div class="option-card-header">
         <span class="option-num">${i + 1}</span>
-        <input type="text" value="${escHtml(opt.message)}" placeholder="Choice option string payload context" oninput="updateOption(${i}, 'message', this.value)">
+        <input type="text" value="${escHtml(opt.message)}" placeholder="Choice option string payload context" oninput="updateOptionData(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size:11.5px; color:var(--muted)">Target:</span>
-        <select onchange="updateOption(${i}, 'nextId', parseInt(this.value))" style="padding: 6px; font-size: 12.5px; flex: 1;">
+        <select onchange="updateOptionData(${i}, 'nextId', parseInt(this.value))" style="padding: 6px; font-size: 12.5px; flex: 1;">
           <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node (Clear / Close UI)</option>
           ${events.map((targetEv, targetIdx) => {
             if (targetIdx === selectedIdx) return '';
@@ -626,9 +738,16 @@ function renderOptions() {
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
 }
 
-function updateOption(optIdx, field, value) {
+function updateOptionData(optIdx, field, value) {
   events[selectedIdx].options[optIdx][field] = value;
   renderCanvas();
+  generateCode();
+}
+
+function updateOption(nodeIdx, optIdx, field, value) {
+  events[nodeIdx].options[optIdx][field] = value;
+  renderCanvas();
+  if (selectedIdx === nodeIdx) renderForm();
   generateCode();
 }
 
