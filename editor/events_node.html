@@ -1170,7 +1170,8 @@ function newEvent() {
 }
 
 function deleteEvent() {
-  if (selectedIdx === null || !confirm(`Permanently drop node array element frame index references [${selectedIdx}]?`)) return;
+//   if (selectedIdx === null || !confirm(`Permanently drop node array element frame index references [${selectedIdx}]?`)) return;
+  if (selectedIdx === null) return;
   const idx = selectedIdx;
   events.forEach(ev => {
     ev.options.forEach(opt => {
