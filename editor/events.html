@@ -33,13 +33,30 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 52px 1fr;
-    grid-template-columns: 260px 1fr 340px;
+    grid-template-columns: 260px 1fr 340px; /* Dynamic via JS */
     grid-template-areas:
       "header header header"
       "sidebar editor output";
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* ── RESIZER HACKS ── */
+  .resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 100;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .resizer:hover, .resizer.dragging {
+    background: rgba(0, 122, 255, 0.25);
+  }
+  .resizer-right { right: -3px; }
+  .resizer-left { left: -3px; }
 
   /* ── HEADER ── */
   header {
@@ -74,6 +91,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative; /* Context for resizer */
   }
   .sidebar-top {
     padding: 12px;
@@ -283,6 +301,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative; /* Context for resizer */
   }
   .output-tabs {
     display: flex;
@@ -492,6 +511,7 @@
 </header>
 
 <div id="sidebar">
+  <div class="resizer resizer-right" id="resizer-left"></div>
   <div class="sidebar-top">
     <button class="btn btn-primary btn-sm btn-full" onclick="newEvent()">+ New Event</button>
   </div>
@@ -539,12 +559,12 @@
 </div>
 
 <div id="output">
+  <div class="resizer resizer-left" id="resizer-right"></div>
   <div class="output-tabs">
     <button class="tab-btn active" id="tab-code-btn" onclick="switchTab('code')">C Code</button>
     <button class="tab-btn" id="tab-chain-btn" onclick="switchTab('chain')">Chain View</button>
   </div>
 
-  <!-- Code tab -->
   <div class="tab-panel active" id="tab-code">
     <div class="code-toolbar">
       <span>Generated C</span>
@@ -553,7 +573,6 @@
     <pre id="code-output">// No events yet.</pre>
   </div>
 
-  <!-- Chain tab -->
   <div class="tab-panel" id="tab-chain">
     <div id="chain-view">
       <div class="chain-empty">
@@ -768,6 +787,47 @@ function setType(type) {
   document.getElementById('btn-msg').className = 'type-btn' + (type === 'EVENT_MESSAGE' ? ' active-msg' : '');
   document.getElementById('btn-det').className = 'type-btn' + (type === 'EVENT_DETOUR' ? ' active-det' : '');
   renderList(); generateCode();
+}
+
+// ── RESIZABLE LOGIC ──
+let sidebarWidth = 260;
+let outputWidth = 340;
+
+const resizerLeft = document.getElementById('resizer-left');
+const resizerRight = document.getElementById('resizer-right');
+
+resizerLeft.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  resizerLeft.classList.add('dragging');
+  document.addEventListener('mousemove', resizeLeftSidebar);
+  document.addEventListener('mouseup', () => {
+    resizerLeft.classList.remove('dragging');
+    document.removeEventListener('mousemove', resizeLeftSidebar);
+  });
+});
+
+resizerRight.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  resizerRight.classList.add('dragging');
+  document.addEventListener('mousemove', resizeRightSidebar);
+  document.addEventListener('mouseup', () => {
+    resizerRight.classList.remove('dragging');
+    document.removeEventListener('mousemove', resizeRightSidebar);
+  });
+});
+
+function resizeLeftSidebar(e) {
+  sidebarWidth = Math.max(160, Math.min(500, e.clientX));
+  updateLayout();
+}
+
+function resizeRightSidebar(e) {
+  outputWidth = Math.max(200, Math.min(800, window.innerWidth - e.clientX));
+  updateLayout();
+}
+
+function updateLayout() {
+  document.body.style.gridTemplateColumns = `${sidebarWidth}px 1fr ${outputWidth}px`;
 }
 
 function addOption() {
