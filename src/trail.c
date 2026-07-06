@@ -40,6 +40,7 @@ int updateTimer(Timer *timer, double deltaTime){
 
 enum State {
     STATE_PLAYING,
+    STATE_STOP,
     STATE_STOP_CHECKPOINT,
     STATE_EVENT,
     STATE_GAMEOVER
@@ -208,6 +209,10 @@ int main()
     float distance = 0;
 
     int currentEventId; // id of current event
+
+    // stop menu glbals
+    int activeOption = 0;
+    int activeSubMenu = -1;
 
     // move timer
     Timer moveTimer;
@@ -427,14 +432,14 @@ int main()
         }
         
         // Enter
-        if(!moving && (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))){
+        if(!moving && (IsKeyPressed(KEY_ENTER))){
 
             switch (gameState) {
 
                 case STATE_STOP_CHECKPOINT:
-                    checkpoints.numVisited++;
-                    gameState = STATE_PLAYING;
-                    moving = true;
+                    // checkpoints.numVisited++;
+                    // gameState = STATE_PLAYING;
+                    // moving = true;
                     break;
                 
                 case STATE_EVENT:
@@ -466,16 +471,19 @@ int main()
             // Draw Gameover
             if (gameState == STATE_GAMEOVER) {
                 int size = 30;
-                int width = MeasureText("EVERYONE DIED!", size);
-                DrawText("EVERYONE DIED!", windowWidth / 2 - width / 2, windowHeight / 2, size, WHITE);
+                char *text = "EVERYONE DIED!";
+                int width = MeasureText(text, size);
+                DrawText(text, windowWidth / 2 - width / 2, windowHeight / 2, size, WHITE);
             }
 
             // Draw Event
             if (gameState == STATE_EVENT) {
-                    int size = 30;
-                    int width = MeasureText(events[currentEventId].message, size);
-                    int x = windowWidth / 2 - width / 2;
-                    int y =  windowHeight / 2;
+
+                int size = 30;
+                int width = MeasureText(events[currentEventId].message, size);
+                int x = windowWidth / 2 - width / 2;
+                int y =  windowHeight / 2;
+
                 if (events[currentEventId].numOptions == 0) {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
                     DrawText(events[currentEventId].message, x, y, size, WHITE);
@@ -503,6 +511,56 @@ int main()
                 
             }
 
+            if (gameState == STATE_PLAYING){
+                int height = 60;
+                int width = 200;
+                int margin = 60;
+                if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop")) gameState = STATE_STOP;
+            }
+
+
+            
+            if (gameState == STATE_PLAYING || gameState == STATE_EVENT)
+            {// Moving?
+                {
+                    int size = 30;
+                    char *text = moving ? "Moving" : "Enter to continue";
+                    int width = MeasureText(text, size);
+                    int x = windowWidth - width  - 30;
+                    int y =  windowHeight - 50;
+                    DrawText(text, x, y , size, WHITE);
+                }
+
+                // Draw Hours, Distance, Food, Party Count
+                {
+                    int size = 30;
+                    DrawText(TextFormat("Horas: %02d", hours), 30, 30, size, WHITE);
+                    DrawText(TextFormat("Distância: %.2fKm", distance), 30, 60, size, WHITE);
+                    DrawText(TextFormat("Food: %d", party.inventory.food), 30, 90, size, WHITE);
+                    DrawText(TextFormat("Alive: %d", party.count), 30, 120, size, WHITE);
+                }
+
+
+                // Draw status bar (party health)
+                for (int i = 3; i >= 0; i--)
+                {
+                    int size = 30;
+                    int posY = windowHeight - 50 - ((3-i)*30);
+                    Color textColor = party.member[i].health == 0 ? RED : WHITE;
+                    DrawText(party.member[i].name, 30, posY, 30, textColor);
+                    DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
+                    if (party.member[i].health == 0){
+                        DrawText("(dead)", 310, posY, 30, textColor);
+                        
+                    } else if (party.member[i].sick){
+                        DrawText("(sick)", 310, posY, 30, textColor);
+                        
+                    }
+                    DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
+                }
+            }
+
+
             // Draw Checkpoint (temp)
             if (gameState == STATE_STOP_CHECKPOINT) {
                 int size = 30;
@@ -513,48 +571,62 @@ int main()
                 DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
             }
 
-            // Moving?
-            {
-                int size = 30;
-                char *message = moving ? "Moving" : "Enter to continue";
-                int width = MeasureText(message, size);
-                int x = windowWidth - width  - 30;
-                int y =  windowHeight - 50;
-                DrawText(message, x, y , size, WHITE);
-            }
+            // Stop Menu
+            bool inCheckpoint = (gameState == STATE_STOP_CHECKPOINT);
 
-            // Draw Hours and Distance
-            {
-                int size = 30;
-                DrawText(TextFormat("Horas: %02d", hours), 30, 30, size, WHITE);
-                DrawText(TextFormat("Distância: %.2fKm", distance), 30, 60, size, WHITE);
-                DrawText(TextFormat("Food: %d", party.inventory.food), 30, 90, size, WHITE);
-                DrawText(TextFormat("Alive: %d", party.count), 30, 120, size, WHITE);
-            }
-
-            // Draw Number of people alive
-            {
-                int size = 30;
-            }
-
-
-            // Draw status bar (party health)
-            for (int i = 3; i >= 0; i--)
-            {
-                int size = 30;
-                int posY = windowHeight - 50 - ((3-i)*30);
-                Color textColor = party.member[i].health == 0 ? RED : WHITE;
-                DrawText(party.member[i].name, 30, posY, 30, textColor);
-                DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
-                if (party.member[i].health == 0){
-                    DrawText("(dead)", 310, posY, 30, textColor);
+            if (gameState == STATE_STOP || inCheckpoint){
+                int height = 60;
+                int width = 200;
+                #define SUBMENU_NONE -1
+                #define SUBMENU_BUY   0
+                #define SUBMENU_SELL  1
+                if (activeSubMenu == SUBMENU_NONE) {
+                    const char* options = inCheckpoint? "Party;Car;Supply;Town" : "Party;Car;Supply";  
+                    GuiToggleGroup((Rectangle){ 0,  windowHeight - height, width, height }, options, &activeOption);
                     
-                } else if (party.member[i].sick){
-                    DrawText("(sick)", 310, posY, 30, textColor);
                     
+                    const char* leaveText = inCheckpoint? "Leave" : "Back";  
+                    if (GuiButton((Rectangle) {windowWidth - width, windowHeight - height, width, height}, leaveText)) {
+                        if (inCheckpoint) checkpoints.numVisited++; // leave checkpoint
+                        gameState = STATE_PLAYING;
+                        moving = false;
+                    }
+
+                    switch (activeOption)
+                    {
+                    // depending on the button clicked within the active option,  i want to enter a button specific "submenu", is there a way to do this without sabing a state? more imideate mode
+                    case 0 /* Party */:  
+                        GuiButton((Rectangle) {40, 40, width, height}, "Rest");
+                        break;
+                    case 1 /* Car */:  
+                        GuiButton((Rectangle) {40, 40, width, height}, "Repair");
+                        GuiButton((Rectangle) {40, 120, width, height}, "Upgrade");
+                        GuiButton((Rectangle) {40, 200, width, height}, "Set Pace");
+                        GuiButton((Rectangle) {40, 280, width, height}, "Road Map");
+                        break;
+                    case 2 /* Supply */:  
+                        GuiButton((Rectangle) {40, 40, width, height}, "Scavange");
+                        GuiButton((Rectangle) {40, 120, width, height}, "Trade");
+                        GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
+                        break;
+                    case 3 /* Town */:  
+                        if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeSubMenu = SUBMENU_BUY;
+                        if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeSubMenu = SUBMENU_SELL;
+                        break;
+                    default:
+                        break;
+                    }
+                } else if (activeSubMenu == SUBMENU_BUY)  {
+                    int margin = 60;
+                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
                 }
-                DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
-            }
+                else if (activeSubMenu == SUBMENU_SELL) {
+                    int margin = 60;
+                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
+                } 
+                
+                
+            }   
 
 
         EndDrawing();
