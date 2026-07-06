@@ -370,6 +370,8 @@ let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
 
 // Group dragging
 let draggingGroupId = null, groupDragOffsets = [];
+let groupRouterOffsets = [];
+let multiRouterOffsets = [];
 
 // ── UTILITY ──
 function getTypeConfig(type) {
@@ -456,13 +458,27 @@ function getGroupBounds(g) {
   g.nodeIndices.forEach(i => {
     const ev = events[i];
     if (!ev) return;
-    // Approximate node height: 44 header + 60 body + options rows
+    // Approximate node height
     const optH = (ev.options?.length || 0) * 37 + (ev.options?.length < 4 ? 36 : 0);
     const h = 44 + 60 + (ev.options?.length > 0 ? optH : 36);
     if (ev.x < minX) minX = ev.x;
     if (ev.y < minY) minY = ev.y;
     if (ev.x + 250 > maxX) maxX = ev.x + 250;
     if (ev.y + h > maxY) maxY = ev.y + h;
+
+    // Include routers in bounds
+    if (ev.options) {
+      ev.options.forEach(opt => {
+        if (opt.routers) {
+          opt.routers.forEach(r => {
+            if (r.x < minX) minX = r.x;
+            if (r.y < minY) minY = r.y;
+            if (r.x > maxX) maxX = r.x;
+            if (r.y > maxY) maxY = r.y;
+          });
+        }
+      });
+    }
   });
   return {
     x: minX - PAD,
@@ -518,6 +534,7 @@ function renderGroups() {
     frame.appendChild(label);
 
     // Group drag: drag the label header to move all member nodes
+    // Group drag: drag the label header to move all member nodes
     label.addEventListener('mousedown', (e) => {
       if (e.target === ungroupBtn) return;
       e.stopPropagation();
@@ -525,12 +542,40 @@ function renderGroups() {
       selectedIdx = null;
       selectedIndices.clear();
       draggingGroupId = g.id;
+      
+      // Capture Node Offsets
       groupDragOffsets = g.nodeIndices.map(i => ({
         idx: i,
         ox: e.clientX - events[i].x,
         oy: e.clientY - events[i].y
       }));
-      renderGroups();
+
+      // Capture Router Offsets
+      groupRouterOffsets = [];
+      g.nodeIndices.forEach(i => {
+        (events[i].options || []).forEach((opt, optIdx) => {
+          (opt.routers || []).forEach((router, routerIdx) => {
+            groupRouterOffsets.push({
+              nodeIdx: i, optIdx, routerIdx,
+              ox: e.clientX - router.x, oy: e.clientY - router.y
+            });
+          });
+        });
+      });
+
+      // --- REPLACE renderGroups(); WITH THIS: ---
+      
+      // 1. Visually select the new group frame
+      document.querySelectorAll('.group-frame').forEach(el => el.classList.remove('group-selected'));
+      frame.classList.add('group-selected');
+      
+      // 2. Visually deselect any previously selected nodes
+      document.querySelectorAll('.node').forEach(n => n.classList.remove('active', 'multi-selected'));
+      
+      // 3. Clear the properties panel
+      renderForm(); 
+      
+      // ------------------------------------------
     });
 
     layer.appendChild(frame);
@@ -1007,6 +1052,16 @@ window.onmousemove = (e) => {
       const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
       if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
     });
+
+    // Translate routers tied to the group
+    groupRouterOffsets.forEach(({ nodeIdx, optIdx, routerIdx, ox, oy }) => {
+      const r = events[nodeIdx].options[optIdx].routers[routerIdx];
+      if (r) {
+        r.x = e.clientX - ox;
+        r.y = e.clientY - oy;
+      }
+    });
+
     renderGroups();
     drawConnections();
   } else if (draggingMulti) {
