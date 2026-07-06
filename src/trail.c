@@ -41,7 +41,7 @@ int updateTimer(Timer *timer, double deltaTime){
 enum State {
     STATE_PLAYING,
     STATE_STOP,
-    STATE_STOP_CHECKPOINT,
+    STATE_STOP_CHECKPOINT, //NOTE(miguel): talvez mudar o nome para STATE_CHECKPOINT
     STATE_EVENT,
     STATE_GAMEOVER
 };
@@ -63,10 +63,12 @@ typedef struct {
     int footwear;
 } Inventory;
 
-int buy(int *iten, int price, int *wallet){
-    if (*wallet < price) return 0;
+int buy(int *shopIten, int *partyIten, int price, int *wallet){
+    if (*wallet < price) return 0; // not enough money
+    // make trasaction
     *wallet -= price;
-    *iten -= 1;
+    *shopIten  -= 1;
+    *partyIten += 1;
     return 1;
 }
 
@@ -85,6 +87,7 @@ typedef struct {
 } Party;
 
 void rest(Party *party, int *hours){
+    // NOTE(miguel): talvez implementar perda de ocmida durante o descanço
     for (int i = 0; i < 4; i++){
         if (party->member[i].dead) continue;
         party->member[i].health += GetRandomValue(0,3);
@@ -219,7 +222,7 @@ int main()
     addOption(&events[STRANGER_TALK], "Não responder", -1);
 
     events[STRANGER_SHORTCUT]   = createEvent("Conheço um atalho!", EVENT_MESSAGE);
-    addOption(&events[STRANGER_SHORTCUT], "Seguir",        9);
+    addOption(&events[STRANGER_SHORTCUT], "Seguir",         9);
     addOption(&events[STRANGER_SHORTCUT], "Deixar pra lá", -1);
     
     events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR);
@@ -233,8 +236,8 @@ int main()
     int currentEventId; // id of current event
 
     // stop menu glbals
-    int activeOption = 0;
-    int activeSubMenu = -1;
+    int activeStopMenu  =  0;
+    int activeStopSubmenu = -1;
 
     // move timer
     Timer moveTimer;
@@ -440,6 +443,7 @@ int main()
                 if (distance >= checkpoints.distance[checkpoints.numVisited] && checkpoints.numVisited < checkpoints.numTotal) {
                     distance = checkpoints.distance[checkpoints.numVisited];
                     gameState = STATE_STOP_CHECKPOINT;
+                    activeStopMenu = 3;
                 }
 
                 // eventos aleatorios
@@ -536,7 +540,11 @@ int main()
                 int height = 60;
                 int width = 200;
                 int margin = 60;
-                if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop")) gameState = STATE_STOP;
+                if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop"))
+                {
+                    gameState = STATE_STOP;
+                    activeStopMenu = 0;
+                }
             }
 
 
@@ -596,21 +604,10 @@ int main()
                 #define SUBMENU_BUY   0
                 #define SUBMENU_SELL  1
                 // #define SUBMENU_REST  2
-                if (activeSubMenu == SUBMENU_NONE) {
-
-                    // Draw city
-                    if (gameState == STATE_STOP_CHECKPOINT)
-                    {
-                        int size = 30;
-                        int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
-                        int x = windowWidth / 2 - width / 2;
-                        int y =  windowHeight / 2;
-                        DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
-                        DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
-                    }
+                if (activeStopSubmenu == SUBMENU_NONE) {
 
                     const char* options = inCheckpoint? "Party;Car;Supply;Town" : "Party;Car;Supply";  
-                    GuiToggleGroup((Rectangle){ 0,  windowHeight - height, width, height }, options, &activeOption);
+                    GuiToggleGroup((Rectangle){ 0,  windowHeight - height, width, height }, options, &activeStopMenu);
                     
                     
                     const char* leaveText = inCheckpoint? "Leave" : "Back";  
@@ -620,7 +617,7 @@ int main()
                         moving = false;
                     }
 
-                    switch (activeOption)
+                    switch (activeStopMenu)
                     {
                     // depending on the button clicked within the active option,  i want to enter a button specific "submenu", is there a way to do this without sabing a state? more imideate mode
                     case 0 /* Party */:  
@@ -650,44 +647,53 @@ int main()
                         }
                         break;
                     case 1 /* Car */:  
-                        GuiButton((Rectangle) {40, 40, width, height}, "Repair");
+                        GuiButton((Rectangle) {40, 40, width, height},  "Repair");
                         GuiButton((Rectangle) {40, 120, width, height}, "Upgrade");
                         GuiButton((Rectangle) {40, 200, width, height}, "Set Pace");
                         GuiButton((Rectangle) {40, 280, width, height}, "Road Map");
                         break;
                     case 2 /* Supply */:  
-                        GuiButton((Rectangle) {40, 40, width, height}, "Scavange");
+                        GuiButton((Rectangle) {40, 40, width, height},  "Scavange");
                         GuiButton((Rectangle) {40, 120, width, height}, "Trade");
                         GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
                         break;
                     case 3 /* Town */:  
-                        if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeSubMenu = SUBMENU_BUY;
-                        if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeSubMenu = SUBMENU_SELL;
+                        // Draw city
+                        {
+                            int size = 30;
+                            int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
+                            int x = windowWidth / 2 - width / 2;
+                            int y =  windowHeight / 2;
+                            DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
+                            DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
+                        }
+                        if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeStopSubmenu = SUBMENU_BUY;
+                        if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeStopSubmenu = SUBMENU_SELL;
                         break;
                     default:
                         break;
                     }
                 }
-                else if (activeSubMenu == SUBMENU_BUY)
+                else if (activeStopSubmenu == SUBMENU_BUY)
                 {
                     
                     int margin = 60;
-                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
+                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
                     DrawText(TextFormat("Money: %d", party.money), 30, windowHeight - 60, 30, WHITE);
                     // (Inventory) {food, ammo, weapon, footwear}
                     DrawText(TextFormat("FOOD:  %03d", checkpoints.Inventory[checkpoints.numVisited].food),       60,  40, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].food, 5, &party.money);
+                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].food, &party.inventory.food, 5, &party.money);
                     DrawText(TextFormat("AMMO:  %03d", checkpoints.Inventory[checkpoints.numVisited].ammo),       60,  80, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].ammo, 5, &party.money);
+                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].ammo, &party.inventory.ammo, 5, &party.money);
                     DrawText(TextFormat("GUNS:  %03d", checkpoints.Inventory[checkpoints.numVisited].weapon),     60, 120, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].weapon, 10, &party.money);
+                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].weapon, &party.inventory.weapon, 10, &party.money);
                     DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[checkpoints.numVisited].footwear),   60, 160, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].footwear, 10, &party.money);
+                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].footwear, &party.inventory.footwear, 10, &party.money);
                 }
-                else if (activeSubMenu == SUBMENU_SELL)
+                else if (activeStopSubmenu == SUBMENU_SELL)
                 {
                     int margin = 60;
-                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
+                    if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
                 }
                 
                 
