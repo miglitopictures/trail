@@ -80,31 +80,15 @@
     position: absolute;
     top: 0; left: 0;
     width: 20000px; height: 20000px;
-    pointer-events: none; /* Let container handle pans */
+    pointer-events: none;
     z-index: 1;
   }
   
-/* Connection Groups & Hitboxes */
-  .svg-link-group {
-    cursor: pointer;
-  }
-  .svg-link-hitbox {
-    stroke: transparent;
-    stroke-width: 25px; /* Increase this to make the hit area larger */
-    fill: none;
-    pointer-events: stroke;
-  }
-  .svg-link-visible {
-    fill: none;
-    pointer-events: none; /* Let the hitbox catch the events */
-    transition: stroke-width 0.1s, stroke 0.1s;
-  }
-  
-  /* When hovering the transparent hitbox, highlight the visible line */
-  .svg-link-group:hover .svg-link-visible {
-    stroke-width: 4px !important;
-    stroke: var(--danger) !important;
-  }
+  /* Connection Groups & Hitboxes */
+  .svg-link-group { cursor: pointer; }
+  .svg-link-hitbox { stroke: transparent; stroke-width: 25px; fill: none; pointer-events: stroke; }
+  .svg-link-visible { fill: none; pointer-events: none; transition: stroke-width 0.1s, stroke 0.1s; }
+  .svg-link-group:hover .svg-link-visible { stroke-width: 4px !important; stroke: var(--danger) !important; }
 
   /* ── NODES ── */
   .node {
@@ -125,23 +109,35 @@
   
   .node-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
   .node-idx { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-family: var(--mono); }
   .node-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
+  
+  .node-title, .node-body, .node-opt-text { 
+    cursor: text; 
+  }
+  .node-title:hover, .node-body:hover, .node-opt-text:hover { 
+    color: var(--text); 
+  }
+  .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-family: var(--mono); }
   .node-body { padding: 12px; font-size: 12px; color: var(--secondary); line-height: 1.45; min-height: 48px; word-break: break-word; }
   
+  /* Inline Editors */
+  .inline-edit-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
+    font-size: 11.5px; font-family: var(--sans); padding: 2px 4px; border-radius: 4px;
+    outline: none; margin: -2px 0; width: 100%; box-sizing: border-box;
+  }
+  .inline-edit-textarea {
+    flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
+    font-size: 12px; font-family: var(--sans); padding: 8px; border-radius: 6px;
+    outline: none; width: calc(100% + 16px); resize: vertical; min-height: 48px; margin: -8px; 
+    display: block; box-sizing: border-box;
+  }
+
   /* Node Input Target Anchor */
   .node-input-anchor {
-    position: absolute;
-    left: -7px;
-    top: 16px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #2a2a35;
-    border: 2.5px solid var(--muted);
-    z-index: 5;
-    cursor: pointer;
-    transition: background 0.1s, transform 0.1s;
+    position: absolute; left: -7px; top: 16px; width: 14px; height: 14px;
+    border-radius: 50%; background: #2a2a35; border: 2.5px solid var(--muted);
+    z-index: 5; cursor: pointer; transition: background 0.1s, transform 0.1s;
   }
   .node.active .node-input-anchor { border-color: var(--accent); }
   .node-input-anchor.drag-over { background: var(--green); border-color: #fff; transform: scale(1.25); }
@@ -150,86 +146,51 @@
   .node-options { border-top: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(0,0,0,0.1); border-radius: 0 0 12px 12px; overflow: hidden; }
   .node-opt-row { position: relative; padding: 8px 28px 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 4px; }
   .node-opt-row:last-child { border-bottom: none; }
-  .node-opt-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; cursor: text; }
-  .node-opt-text:hover { color: var(--text); }
+  .node-opt-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   
   .node-add-option {
-    padding: 8px; font-size: 11px; font-weight: 600; color: var(--muted);
-    text-align: center; cursor: pointer; border-top: 1px solid var(--border);
-    background: rgba(255,255,255,0.02); transition: background 0.15s, color 0.15s;
+    padding: 8px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; cursor: pointer; 
+    border-top: 1px solid var(--border); background: rgba(255,255,255,0.02); transition: background 0.15s, color 0.15s;
   }
   .node-add-option:hover { background: rgba(255,255,255,0.06); color: var(--text); }
 
-  .inline-edit-input {
-    flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
-    font-size: 11.5px; font-family: var(--sans); padding: 2px 4px; border-radius: 4px;
-    outline: none; margin: -2px 4px -2px -4px; width: 100%;
-  }
-
   .node-output-handle {
-    position: absolute;
-    right: -6px;
-    top: calc(50% - 6px);
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--surface);
-    border: 2px solid var(--muted);
-    cursor: crosshair;
-    z-index: 5;
-    transition: transform 0.1s, background 0.1s;
+    position: absolute; right: -6px; top: calc(50% - 6px); width: 12px; height: 12px;
+    border-radius: 50%; background: var(--surface); border: 2px solid var(--muted);
+    cursor: crosshair; z-index: 5; transition: transform 0.1s, background 0.1s;
   }
   .node-output-handle:hover { transform: scale(1.3); background: var(--accent); border-color: #fff; }
   .node-output-handle.connected { border-color: var(--accent); background: var(--accent); }
 
   /* ── RIGHT EDITOR SIDE-PANEL ── */
   #right-panel {
-    grid-area: editor;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
-    display: grid;
-    grid-template-rows: auto 1fr;
-    overflow: hidden;
-    z-index: 50;
+    grid-area: editor; background: var(--surface); border-left: 1px solid var(--border);
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden; z-index: 50;
   }
   .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px; background: var(--panel); }
   .tab-btn { padding: 14px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; }
   .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-  
   .panel-content { overflow-y: auto; padding: 20px; display: none; height: 100%; }
   .panel-content.active { display: block; }
-
-  /* Forms Elements */
   .field-group { margin-bottom: 18px; }
   .field-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
-  
-  input[type="text"], textarea, select {
-    width: 100%; background: var(--panel); border: 1px solid var(--border-md); color: var(--text);
-    font-family: var(--sans); font-size: 13.5px; padding: 9px 12px; border-radius: 8px; outline: none;
-  }
+  input[type="text"], textarea, select { width: 100%; background: var(--panel); border: 1px solid var(--border-md); color: var(--text); font-family: var(--sans); font-size: 13.5px; padding: 9px 12px; border-radius: 8px; outline: none; }
   input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); }
   textarea { resize: vertical; min-height: 70px; }
-
   .type-selector { display: flex; gap: 6px; flex-wrap: wrap; }
   .type-btn { flex: 1; min-width: 85px; padding: 8px; background: var(--panel); border: 1px solid var(--border-md); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 6px; }
   .type-btn.active-type { font-weight: 600; }
-
   .option-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; position: relative; }
   .option-card-header { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
   .option-num { font-size: 11px; color: var(--muted); font-weight: 600; }
   .rm-option { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; margin-left: auto; }
   .rm-option:hover { color: var(--danger); }
-
-  /* Code Output Frame Styling */
   pre { flex: 1; overflow: auto; padding: 14px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: #a2ebb9; background: #13241a; border-radius: 8px; white-space: pre; }
-
-  /* Action Triggers Elements */
   .btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border-md); font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; background: var(--panel); color: var(--text); }
   .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn-danger { color: var(--danger); border-color: rgba(255,69,58,0.2); background: transparent; }
   .btn-danger:hover { background: rgba(255,69,58,0.1); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
-  
   .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 50; }
   .copied-toast { position: fixed; bottom: 24px; right: 444px; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 1000; }
   .copied-toast.show { opacity: 1; }
@@ -263,7 +224,6 @@
     <button class="tab-btn active" id="tab-edit-btn" onclick="switchTab('edit')">Properties Panel</button>
     <button class="tab-btn" id="tab-code-btn" onclick="switchTab('code')">Generated Arrays</button>
   </div>
-
   <div class="panel-content active" id="panel-edit">
     <div class="empty-state" id="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px;">
       <div style="font-size: 36px;">🖱️</div>
@@ -274,27 +234,22 @@
         <div class="field-label">C Macro #define Name</div>
         <input type="text" id="f-define" placeholder="e.g. EMPTY_HOUSE" oninput="onFieldChange()">
       </div>
-
       <div class="field-group">
         <div class="field-label">Message Payload String (<span id="char-count">0</span>/255)</div>
         <textarea id="f-message" maxlength="255" oninput="onFieldChange()"></textarea>
       </div>
-
       <div class="field-group">
         <div class="field-label">Structural State Type</div>
         <div class="type-selector" id="type-selector-container"></div>
       </div>
-
       <div class="field-group">
         <div class="field-label">Options Layout Config Matrix</div>
         <div id="options-container"></div>
         <button class="btn btn-sm" id="add-option-btn" onclick="addOption()" style="margin-top: 4px;">+ Insert Option Branch Pathway</button>
       </div>
-
       <button class="btn btn-danger btn-sm" onclick="deleteEvent()" style="margin-top: 10px; width: 100%;">Delete Selected Node Frame</button>
     </div>
   </div>
-
   <div class="panel-content" id="panel-code">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
       <span style="font-size: 12px; color: var(--muted)">C Initializer Sequence Struct Implementation</span>
@@ -317,21 +272,46 @@ const EVENT_TYPES = {
 let events = [];
 let selectedIdx = null;
 let selectedLink = null; // { nodeIdx, optionIdx }
-
-// Infinite Grid Canvas Core Offsets Matrices variables tracking mechanisms
 let panX = 40, panY = 40;
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
-
-// Drag and drop linking runtime vectors trackers
 let activeLinkDrag = null; // { fromNodeIdx, optionIdx, startX, startY, currentX, currentY }
-let targetHoverNodeIdx = null;
 
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
 }
 
-// ── RENDER CONTROLLER PIPELINE MECHANISMS ──
+// ── UTILITY: INLINE EDITING HELPER ──
+function makeEditable(element, initialValue, isTextArea, onSave) {
+  const input = document.createElement(isTextArea ? 'textarea' : 'input');
+  input.className = isTextArea ? 'inline-edit-textarea' : 'inline-edit-input';
+  input.value = initialValue;
+  
+  // Prevent drag & dblclick bleeding while editing
+  input.onmousedown = e => e.stopPropagation();
+  input.ondblclick = e => e.stopPropagation();
+
+  const finish = () => {
+    if (!input.parentNode) return;
+    const val = input.value;
+    input.parentNode.replaceChild(element, input);
+    onSave(val);
+  };
+
+  input.onblur = finish;
+  input.onkeydown = e => {
+    if (e.key === 'Enter' && (!isTextArea || !e.shiftKey)) {
+      e.preventDefault();
+      input.blur();
+    }
+  };
+
+  element.parentNode.replaceChild(input, element);
+  input.focus();
+  input.selectionStart = input.selectionEnd = input.value.length;
+}
+
+// ── RENDER CONTROLLER PIPELINE ──
 function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
@@ -344,30 +324,60 @@ function renderCanvas() {
     div.style.top = `${ev.y}px`;
     div.setAttribute('data-idx', i);
     
-    // Node input anchoring receiver point targeting mechanism
     const inputAnchor = document.createElement('div');
     inputAnchor.className = 'node-input-anchor';
-    if (targetHoverNodeIdx === i) inputAnchor.className += ' drag-over';
     
-    // Header
     const nHead = document.createElement('div');
     nHead.className = 'node-header';
-    nHead.innerHTML = `
-      <span class="node-idx">[${i}]</span>
-      <span class="node-title">${ev.define || '(no define)'}</span>
-      <span class="node-badge" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>
-    `;
     
-    // Body Text Element string parser handler container boundaries 
+    const nIdx = document.createElement('span');
+    nIdx.className = 'node-idx';
+    nIdx.textContent = `[${i}]`;
+
+    // FEATURE 0: Double click to edit Define Macro
+    const nTitle = document.createElement('span');
+    nTitle.className = 'node-title';
+    nTitle.textContent = ev.define || '(no define)';
+    nTitle.title = "Double click to edit";
+    nTitle.ondblclick = (e) => {
+      e.stopPropagation();
+      makeEditable(nTitle, ev.define || '', false, (val) => {
+        events[i].define = val.trim().toUpperCase().replace(/\s+/g, '_');
+        nTitle.textContent = events[i].define || '(no define)';
+        if (selectedIdx === i) renderForm();
+        generateCode();
+      });
+    };
+
+    const nBadge = document.createElement('span');
+    nBadge.className = 'node-badge';
+    nBadge.style.background = cfg.bg;
+    nBadge.style.color = cfg.fg;
+    nBadge.textContent = cfg.short;
+
+    nHead.appendChild(nIdx);
+    nHead.appendChild(nTitle);
+    nHead.appendChild(nBadge);
+    
+    // FEATURE 1: Double click to edit Message Payload
     const nBody = document.createElement('div');
     nBody.className = 'node-body';
     nBody.textContent = ev.message || '(Empty Text String)';
+    nBody.title = "Double click to edit";
+    nBody.ondblclick = (e) => {
+      e.stopPropagation();
+      makeEditable(nBody, ev.message || '', true, (val) => {
+        events[i].message = val;
+        nBody.textContent = val || '(Empty Text String)';
+        if (selectedIdx === i) renderForm();
+        generateCode();
+      });
+    };
     
     div.appendChild(inputAnchor);
     div.appendChild(nHead);
     div.appendChild(nBody);
 
-    // Options Branch Rendering Rows Stack with Connection Handles
     const optsCont = document.createElement('div');
     optsCont.className = 'node-options';
     
@@ -376,49 +386,31 @@ function renderCanvas() {
         const optRow = document.createElement('div');
         optRow.className = 'node-opt-row';
         
+        // FEATURE 2: Double click to edit Option Text
         const optTxt = document.createElement('span');
         optTxt.className = 'node-opt-text';
         optTxt.textContent = `${optIdx + 1}. ${opt.message || 'Option'}`;
         optTxt.title = "Double click to edit";
-
-        // Double Click to Edit Inline
         optTxt.ondblclick = (e) => {
           e.stopPropagation();
-          const input = document.createElement('input');
-          input.className = 'inline-edit-input';
-          input.value = opt.message;
-          
-          input.onmousedown = (evMousedown) => evMousedown.stopPropagation(); // prevent drag
-          input.onblur = () => {
-            updateOption(i, optIdx, 'message', input.value);
-          };
-          input.onkeydown = (ke) => {
-            if (ke.key === 'Enter') input.blur();
-          };
-          
-          optRow.replaceChild(input, optTxt);
-          input.focus();
+          makeEditable(optTxt, opt.message || '', false, (val) => {
+            events[i].options[optIdx].message = val;
+            optTxt.textContent = `${optIdx + 1}. ${val || 'Option'}`;
+            if (selectedIdx === i) renderForm();
+            generateCode();
+          });
         };
         
         const nextLbl = document.createElement('span');
-        nextLbl.style.fontSize = '9px';
-        nextLbl.style.padding = '2px 4px';
-        nextLbl.style.borderRadius = '3px';
-        
+        nextLbl.style.fontSize = '9px'; nextLbl.style.padding = '2px 4px'; nextLbl.style.borderRadius = '3px';
         if (opt.nextId === -1) {
-          nextLbl.textContent = 'TERM';
-          nextLbl.style.background = 'rgba(255,255,255,0.05)';
-          nextLbl.style.color = 'var(--muted)';
+          nextLbl.textContent = 'TERM'; nextLbl.style.background = 'rgba(255,255,255,0.05)'; nextLbl.style.color = 'var(--muted)';
         } else {
-          nextLbl.textContent = `→ [${opt.nextId}]`;
-          nextLbl.style.background = 'var(--accent-dim)';
-          nextLbl.style.color = '#7fc0ff';
+          nextLbl.textContent = `→ [${opt.nextId}]`; nextLbl.style.background = 'var(--accent-dim)'; nextLbl.style.color = '#7fc0ff';
         }
 
         const outHandle = document.createElement('div');
         outHandle.className = 'node-output-handle' + (opt.nextId !== -1 ? ' connected' : '');
-        
-        // Wire mousedown execution hookups directly onto output points components
         outHandle.onmousedown = (e) => onHandleMouseDown(e, i, optIdx);
 
         optRow.appendChild(optTxt);
@@ -428,7 +420,6 @@ function renderCanvas() {
       });
     }
 
-    // Add Option (+) button in the UI
     if (!ev.options || ev.options.length < 4) {
       const addBtn = document.createElement('div');
       addBtn.className = 'node-add-option';
@@ -437,7 +428,8 @@ function renderCanvas() {
         e.stopPropagation();
         if (!events[i].options) events[i].options = [];
         events[i].options.push({ message: 'New Option', nextId: -1 });
-        selectEvent(i); // selects the node, triggers re-renders
+        renderCanvas(); 
+        selectEvent(i); 
       };
       optsCont.appendChild(addBtn);
     }
@@ -460,19 +452,15 @@ function drawConnections() {
     if (!ev.options) return;
     ev.options.forEach((opt, optIdx) => {
       if (opt.nextId === -1 || !events[opt.nextId]) return;
-
-      const nodeEl = document.querySelector(`[data-idx="${i}"]`);
+      const nodeEl = document.querySelector(`.node[data-idx="${i}"]`);
       const handles = nodeEl?.querySelectorAll('.node-output-handle');
       const handle = handles?.[optIdx];
-      
-      const targetEl = document.querySelector(`[data-idx="${opt.nextId}"]`);
+      const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
       const anchor = targetEl?.querySelector('.node-input-anchor');
-
       if (!handle || !anchor) return;
 
       const hRect = handle.getBoundingClientRect();
       const aRect = anchor.getBoundingClientRect();
-
       const startX = hRect.left + hRect.width / 2 - canvasRect.left;
       const startY = hRect.top  + hRect.height / 2 - canvasRect.top;
       const endX   = aRect.left + aRect.width  / 2 - canvasRect.left;
@@ -481,18 +469,14 @@ function drawConnections() {
       const cp1X = startX + 70, cp1Y = startY;
       const cp2X = endX   - 70, cp2Y = endY;
 
-      // Create an SVG Group
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('class', 'svg-link-group');
-
       const pathString = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
-
-      // 1. Invisible Hitbox Path
+      
       const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       hitPath.setAttribute('d', pathString);
       hitPath.setAttribute('class', 'svg-link-hitbox');
-
-      // 2. Visible Line Path
+      
       const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       visPath.setAttribute('d', pathString);
       visPath.setAttribute('class', 'svg-link-visible');
@@ -503,30 +487,23 @@ function drawConnections() {
       visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
       visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
       
-      // Append paths to the group
       group.appendChild(hitPath);
       group.appendChild(visPath);
 
-      // Select connection when the group (specifically the hitbox) is clicked
       group.onmousedown = (e) => {
         e.stopPropagation();
         selectedLink = { nodeIdx: i, optionIdx: optIdx };
-        selectedIdx = null; 
-        renderCanvas();
-        renderForm();
+        selectEvent(null); // Clear node selection securely
       };
-      
       svg.appendChild(group);
     });
   });
 
-  // Render temporary dynamic line path during dragging
   if (activeLinkDrag) {
     const cp1X = activeLinkDrag.startX + 70;
     const cp1Y = activeLinkDrag.startY;
     const cp2X = activeLinkDrag.currentX - 70;
     const cp2Y = activeLinkDrag.currentY;
-
     const dragPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     dragPath.setAttribute('d', `M ${activeLinkDrag.startX} ${activeLinkDrag.startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${activeLinkDrag.currentX} ${activeLinkDrag.currentY}`);
     dragPath.setAttribute('stroke', '#30d158');
@@ -541,19 +518,32 @@ function updateCanvasTransform() {
   document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
 }
 
-// ── EVENTS HOOKUPS AND INTERACTIVE CONTROLS MATRIX ──
+// ── SURGICAL EVENTS HOOKUPS (No Full Canvas Re-rendering!) ──
 function onCanvasMouseDown(e) {
   if (e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas') {
     isPanning = true;
     startPanX = e.clientX - panX;
     startPanY = e.clientY - panY;
-    
-    // Clear selection models
     selectedLink = null;
-    selectedIdx = null;
-    renderCanvas();
-    renderForm();
+    selectEvent(null); // Just un-focuses UI, does not destroy DOM
   }
+}
+
+function selectEvent(idx) {
+  selectedIdx = idx;
+  
+  // Surgically update the CSS classes without destroying the DOM elements!
+  document.querySelectorAll('.node').forEach(node => {
+    if (idx !== null && parseInt(node.getAttribute('data-idx')) === idx) {
+      node.classList.add('active');
+    } else {
+      node.classList.remove('active');
+    }
+  });
+
+  drawConnections();
+  renderForm();
+  generateCode();
 }
 
 function onNodeMouseDown(e, idx) {
@@ -561,115 +551,101 @@ function onNodeMouseDown(e, idx) {
   e.stopPropagation();
   selectedLink = null;
   selectEvent(idx);
+  
   draggingNodeIdx = idx;
   dragOffsetX = e.clientX - events[idx].x;
   dragOffsetY = e.clientY - events[idx].y;
 }
 
-// Global Keyboard Listeners (Hotkeys for Deletion)
 window.addEventListener('keydown', (e) => {
-  // Prevent executing hotkeys while user is typing in text fields
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
-
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedLink) {
-      // 1. Delete Link Connection
       events[selectedLink.nodeIdx].options[selectedLink.optionIdx].nextId = -1;
       selectedLink = null;
-      renderCanvas();
-      generateCode();
+      renderCanvas(); generateCode();
     } else if (selectedIdx !== null) {
-      // 2. Delete Selected Node
       deleteEvent();
     }
   }
 });
 
 function onHandleMouseDown(e, nodeIdx, optionIdx) {
-  e.stopPropagation();
-  e.preventDefault();
-  
-  const canvasEl = document.getElementById('canvas');
-  const canvasRect = canvasEl.getBoundingClientRect();
-  
+  e.stopPropagation(); e.preventDefault();
+  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
   const handleRect = e.target.getBoundingClientRect();
-  const sX = handleRect.left + (handleRect.width / 2) - canvasRect.left;
-  const sY = handleRect.top + (handleRect.height / 2) - canvasRect.top;
-
-  const cX = e.clientX - canvasRect.left;
-  const cY = e.clientY - canvasRect.top;
-
   activeLinkDrag = {
-    fromNodeIdx: nodeIdx,
-    optionIdx: optionIdx,
-    startX: sX,
-    startY: sY,
-    currentX: cX,
-    currentY: cY
+    fromNodeIdx: nodeIdx, optionIdx: optionIdx,
+    startX: handleRect.left + (handleRect.width / 2) - canvasRect.left,
+    startY: handleRect.top + (handleRect.height / 2) - canvasRect.top,
+    currentX: e.clientX - canvasRect.left,
+    currentY: e.clientY - canvasRect.top
   };
 }
 
 window.onmousemove = (e) => {
   if (isPanning) {
-    panX = e.clientX - startPanX;
-    panY = e.clientY - startPanY;
+    panX = e.clientX - startPanX; panY = e.clientY - startPanY;
     updateCanvasTransform();
   } else if (draggingNodeIdx !== null) {
     events[draggingNodeIdx].x = e.clientX - dragOffsetX;
     events[draggingNodeIdx].y = e.clientY - dragOffsetY;
-    renderCanvas();
+    
+    // Surgically update position for extreme smoothness (does not break inputs/DOM!)
+    const nodeEl = document.querySelector(`.node[data-idx="${draggingNodeIdx}"]`);
+    if (nodeEl) {
+      nodeEl.style.left = `${events[draggingNodeIdx].x}px`;
+      nodeEl.style.top = `${events[draggingNodeIdx].y}px`;
+    }
+    drawConnections();
   } else if (activeLinkDrag) {
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
     activeLinkDrag.currentX = e.clientX - canvasRect.left;
     activeLinkDrag.currentY = e.clientY - canvasRect.top;
     
-    targetHoverNodeIdx = null;
+    let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     for (let el of elements) {
       const nodeEl = el.closest('.node');
       if (nodeEl) {
         const idx = parseInt(nodeEl.getAttribute('data-idx'));
-        if (idx !== activeLinkDrag.fromNodeIdx) {
-          targetHoverNodeIdx = idx;
-          break;
-        }
+        if (idx !== activeLinkDrag.fromNodeIdx) { hoveredIdx = idx; break; }
       }
     }
-    renderCanvas();
+    
+    // Surgically apply hover styles to input anchors
+    document.querySelectorAll('.node-input-anchor').forEach(anc => anc.classList.remove('drag-over'));
+    if (hoveredIdx !== null) {
+      const targetAnc = document.querySelector(`.node[data-idx="${hoveredIdx}"] .node-input-anchor`);
+      if (targetAnc) targetAnc.classList.add('drag-over');
+    }
+    drawConnections();
   }
 };
 
-window.onmouseup = () => {
-  isPanning = false;
-  draggingNodeIdx = null;
-  
+window.onmouseup = (e) => {
+  isPanning = false; draggingNodeIdx = null;
   if (activeLinkDrag) {
-    if (targetHoverNodeIdx !== null) {
-      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = targetHoverNodeIdx;
-    } else {
-      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = -1;
+    let hoveredIdx = null;
+    const elements = document.elementsFromPoint(e.clientX, e.clientY);
+    for (let el of elements) {
+      const nodeEl = el.closest('.node');
+      if (nodeEl) {
+        const idx = parseInt(nodeEl.getAttribute('data-idx'));
+        if (idx !== activeLinkDrag.fromNodeIdx) { hoveredIdx = idx; break; }
+      }
     }
+    events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = (hoveredIdx !== null) ? hoveredIdx : -1;
     activeLinkDrag = null;
-    targetHoverNodeIdx = null;
-    renderCanvas();
+    renderCanvas(); // Re-render canvas safely now that drag is over
     renderForm();
     generateCode();
   }
 };
 
-function resetView() {
-  panX = 40; panY = 40;
-  updateCanvasTransform();
-}
+function resetView() { panX = 40; panY = 40; updateCanvasTransform(); }
 
-// ── PROPERTIES PANEL UPDATE MANAGEMENT FUNCTIONS ──
-function selectEvent(idx) {
-  selectedIdx = idx;
-  renderCanvas();
-  renderForm();
-  generateCode();
-}
-
+// ── PROPERTIES PANEL ──
 function renderForm() {
   if (selectedIdx === null) {
     document.getElementById('empty-state').style.display = 'flex';
@@ -683,48 +659,38 @@ function renderForm() {
   document.getElementById('f-define').value = ev.define || '';
   document.getElementById('f-message').value = ev.message || '';
   document.getElementById('char-count').textContent = (ev.message || '').length;
-  
-  renderTypeSelector(ev.type);
-  renderOptions();
+  renderTypeSelector(ev.type); renderOptions();
 }
 
 function renderTypeSelector(activeType) {
-  const container = document.getElementById('type-selector-container');
-  container.innerHTML = '';
+  const container = document.getElementById('type-selector-container'); container.innerHTML = '';
   Object.keys(EVENT_TYPES).forEach(key => {
     const typeDef = EVENT_TYPES[key];
     const btn = document.createElement('button');
-    btn.className = 'type-btn';
+    btn.className = 'type-btn' + (key === activeType ? ' active-type' : '');
     btn.textContent = typeDef.label;
-    if (key === activeType) {
-      btn.className += ' active-type';
-      btn.style.background = typeDef.bg;
-      btn.style.borderColor = typeDef.border;
-      btn.style.color = typeDef.fg;
-    }
+    if (key === activeType) { btn.style.background = typeDef.bg; btn.style.borderColor = typeDef.border; btn.style.color = typeDef.fg; }
     btn.onclick = () => { events[selectedIdx].type = key; renderCanvas(); renderTypeSelector(key); generateCode(); };
     container.appendChild(btn);
   });
 }
 
 function renderOptions() {
-  const container = document.getElementById('options-container');
-  container.innerHTML = '';
+  const container = document.getElementById('options-container'); container.innerHTML = '';
   const ev = events[selectedIdx];
-  
   ev.options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'option-card';
     card.innerHTML = `
       <div class="option-card-header">
         <span class="option-num">${i + 1}</span>
-        <input type="text" value="${escHtml(opt.message)}" placeholder="Choice option string payload context" oninput="updateOptionData(${i}, 'message', this.value)">
+        <input type="text" value="${escHtml(opt.message)}" oninput="updateOptionData(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size:11.5px; color:var(--muted)">Target:</span>
         <select onchange="updateOptionData(${i}, 'nextId', parseInt(this.value))" style="padding: 6px; font-size: 12.5px; flex: 1;">
-          <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node (Clear / Close UI)</option>
+          <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node</option>
           ${events.map((targetEv, targetIdx) => {
             if (targetIdx === selectedIdx) return '';
             const label = targetEv.define ? `[${targetIdx}] ${targetEv.define}` : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
@@ -738,66 +704,35 @@ function renderOptions() {
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
 }
 
-function updateOptionData(optIdx, field, value) {
-  events[selectedIdx].options[optIdx][field] = value;
-  renderCanvas();
-  generateCode();
-}
-
-function updateOption(nodeIdx, optIdx, field, value) {
-  events[nodeIdx].options[optIdx][field] = value;
-  renderCanvas();
-  if (selectedIdx === nodeIdx) renderForm();
-  generateCode();
-}
-
-function addOption() {
-  events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
-  renderOptions();
-  renderCanvas();
-  generateCode();
-}
-
-function removeOption(optIdx) {
-  events[selectedIdx].options.splice(optIdx, 1);
-  renderOptions();
-  renderCanvas();
-  generateCode();
-}
+function updateOptionData(optIdx, field, value) { events[selectedIdx].options[optIdx][field] = value; renderCanvas(); generateCode(); }
+function addOption() { events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 }); renderOptions(); renderCanvas(); generateCode(); }
+function removeOption(optIdx) { events[selectedIdx].options.splice(optIdx, 1); renderOptions(); renderCanvas(); generateCode(); }
 
 function onFieldChange() {
   const ev = events[selectedIdx];
   ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
   ev.message = document.getElementById('f-message').value;
   document.getElementById('char-count').textContent = ev.message.length;
-  renderCanvas();
-  generateCode();
+  renderCanvas(); generateCode();
 }
 
 function newEvent() {
-  const defaultType = Object.keys(EVENT_TYPES)[0] || 'EVENT_MESSAGE';
   const x = -panX + 100 + (events.length * 25 % 200);
   const y = -panY + 120 + (events.length * 45 % 300);
-  
-  events.push({ define: '', message: 'New visual node story data element.', type: defaultType, options: [], x, y });
-  selectEvent(events.length - 1);
+  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
+  renderCanvas(); selectEvent(events.length - 1);
 }
 
 function deleteEvent() {
   if (selectedIdx === null || !confirm(`Permanently drop node array element frame index references [${selectedIdx}]?`)) return;
-  
   events.forEach(ev => {
     ev.options.forEach(opt => {
-      if (opt.nextId === selectedIdx) opt.nextId = -1;
-      else if (opt.nextId > selectedIdx) opt.nextId--;
+      if (opt.nextId === selectedIdx) opt.nextId = -1; else if (opt.nextId > selectedIdx) opt.nextId--;
     });
   });
-
   events.splice(selectedIdx, 1);
   selectedIdx = events.length > 0 ? 0 : null;
-  renderCanvas();
-  renderForm();
-  generateCode();
+  renderCanvas(); renderForm(); generateCode();
 }
 
 function switchTab(tab) {
@@ -807,12 +742,8 @@ function switchTab(tab) {
   document.getElementById('panel-code').className = 'panel-content' + (tab === 'code' ? ' active' : '');
 }
 
-// ── COMPILER GENERATOR FOR STRUCT ARRAYS ──
 function generateCode() {
-  if (events.length === 0) {
-    document.getElementById('code-output').textContent = '// Empty canvas arrays metrics models profiles parameters.';
-    return;
-  }
+  if (events.length === 0) return document.getElementById('code-output').textContent = '// Empty canvas arrays metrics models profiles parameters.';
   const lines = [];
   const defs = events.map((ev, i) => ev.define ? [ev.define, i] : null).filter(Boolean);
   if (defs.length > 0) {
@@ -832,28 +763,21 @@ function generateCode() {
   document.getElementById('code-output').textContent = lines.join('\n');
 }
 
-// ── UTILITIES STORAGE IMPORT/EXPORT PERSISTENCE DATA MATRIX ──
 function exportJSON() {
-  const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'vidas_secas_canvas_nodes.json';
-  a.click();
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' }));
+  a.download = 'vidas_secas_canvas_nodes.json'; a.click();
 }
 
 function importJSON() {
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.json';
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
   input.onchange = e => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        const data = JSON.parse(ev.target.result);
-        events = data.map((item, idx) => ({
-          ...item,
-          x: item.x !== undefined ? item.x : 60 + (idx * 280) % 1200,
-          y: item.y !== undefined ? item.y : 60 + Math.floor(idx / 4) * 220
+        events = JSON.parse(ev.target.result).map((item, idx) => ({
+          ...item, x: item.x !== undefined ? item.x : 60 + (idx * 280) % 1200, y: item.y !== undefined ? item.y : 60 + Math.floor(idx / 4) * 220
         }));
         selectedIdx = events.length > 0 ? 0 : null;
         renderCanvas(); renderForm(); generateCode();
@@ -865,10 +789,8 @@ function importJSON() {
 }
 
 function copyCode() {
-  const code = document.getElementById('code-output').textContent;
-  navigator.clipboard.writeText(code).then(() => {
-    const toast = document.getElementById('toast');
-    toast.classList.add('show');
+  navigator.clipboard.writeText(document.getElementById('code-output').textContent).then(() => {
+    const toast = document.getElementById('toast'); toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 1800);
   });
 }
@@ -876,7 +798,6 @@ function copyCode() {
 function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// ── YOUR COMPLETE ORIGINAL SEED DATA WITH GRACEFUL POSITIONING COORDINATES ──
 const seed = [
   { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: 40, y: 40 },
   { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: 310, y: 40 },
@@ -896,11 +817,8 @@ const seed = [
   { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: 1150, y: 540 },
   { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: 1450, y: 540 },
 ];
-
 events = seed.map(e => ({ ...e, options: e.options.map(o => ({ ...o })) }));
-renderCanvas();
-renderForm();
-generateCode();
+renderCanvas(); renderForm(); generateCode();
 </script>
 </body>
 </html>
