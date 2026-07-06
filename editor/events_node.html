@@ -83,7 +83,7 @@
     pointer-events: none;
     z-index: 1;
   }
-  
+
   /* Connection Groups & Hitboxes */
   .svg-link-group { cursor: pointer; }
   .svg-link-hitbox { stroke: transparent; stroke-width: 25px; fill: none; pointer-events: stroke; }
@@ -106,20 +106,17 @@
   }
   .node:hover { border-color: var(--muted); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
   .node.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.3), 0 8px 24px rgba(0,0,0,0.5); z-index: 10; }
-  
+  .node.multi-selected { border-color: #5e5ce6; box-shadow: 0 0 0 2px rgba(94,92,230,0.4), 0 8px 24px rgba(0,0,0,0.5); z-index: 9; }
+
   .node-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
   .node-idx { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
   .node-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
-  
-  .node-title, .node-body, .node-opt-text { 
-    cursor: text; 
-  }
-  .node-title:hover, .node-body:hover, .node-opt-text:hover { 
-    color: var(--text); 
-  }
+
+  .node-title, .node-body, .node-opt-text { cursor: text; }
+  .node-title:hover, .node-body:hover, .node-opt-text:hover { color: var(--text); }
   .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-family: var(--mono); }
   .node-body { padding: 12px; font-size: 12px; color: var(--secondary); line-height: 1.45; min-height: 48px; word-break: break-word; }
-  
+
   /* Inline Editors */
   .inline-edit-input {
     flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
@@ -129,7 +126,7 @@
   .inline-edit-textarea {
     flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text);
     font-size: 12px; font-family: var(--sans); padding: 8px; border-radius: 6px;
-    outline: none; width: calc(100% + 16px); resize: vertical; min-height: 48px; margin: -8px; 
+    outline: none; width: calc(100% + 16px); resize: vertical; min-height: 48px; margin: -8px;
     display: block; box-sizing: border-box;
   }
 
@@ -147,9 +144,9 @@
   .node-opt-row { position: relative; padding: 8px 28px 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 4px; }
   .node-opt-row:last-child { border-bottom: none; }
   .node-opt-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-  
+
   .node-add-option {
-    padding: 8px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; cursor: pointer; 
+    padding: 8px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; cursor: pointer;
     border-top: 1px solid var(--border); background: rgba(255,255,255,0.02); transition: background 0.15s, color 0.15s;
   }
   .node-add-option:hover { background: rgba(255,255,255,0.06); color: var(--text); }
@@ -191,7 +188,7 @@
   .btn-danger { color: var(--danger); border-color: rgba(255,69,58,0.2); background: transparent; }
   .btn-danger:hover { background: rgba(255,69,58,0.1); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
-  .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 50; }
+  .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 50; align-items: center; }
   .copied-toast { position: fixed; bottom: 24px; right: 444px; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 1000; }
   .copied-toast.show { opacity: 1; }
 
@@ -210,6 +207,60 @@
   }
   .router-node:hover { border-color: var(--accent); background: var(--accent-dim); }
   .router-node.router-selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 0 3px rgba(0,122,255,0.3); }
+
+  /* ── GROUP FRAMES ── */
+  .group-frame {
+    position: absolute;
+    border-radius: 16px;
+    border: 2px solid;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .group-frame.group-selected {
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
+  }
+  .group-label {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border-radius: 14px 14px 0 0;
+    cursor: move;
+    pointer-events: all;
+    gap: 8px;
+    user-select: none;
+  }
+  .group-label-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .group-ungroup-btn {
+    font-size: 10px;
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: opacity 0.1s, background 0.1s;
+  }
+  .group-ungroup-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+
+  /* ── MARQUEE SELECTION RECT ── */
+  #marquee {
+    position: absolute;
+    border: 1.5px dashed rgba(94,92,230,0.8);
+    background: rgba(94,92,230,0.06);
+    pointer-events: none;
+    z-index: 200;
+    display: none;
+    border-radius: 4px;
+  }
 </style>
 </head>
 <body>
@@ -227,12 +278,14 @@
 <div id="canvas-container" onmousedown="onCanvasMouseDown(event)">
   <div id="canvas">
     <svg id="svg-layer"></svg>
+    <div id="groups-layer"></div>
     <div id="nodes-layer"></div>
   </div>
+  <div id="marquee"></div>
   <div class="canvas-actions">
     <button class="btn btn-primary" onclick="newEvent()">+ Add Story Node</button>
     <button class="btn" onclick="resetView()">Center View</button>
-    <span style="font-size:11px; color: var(--muted); align-self: center; padding-left: 4px;">Ctrl+click a connection to add a router</span>
+    <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+click line for router</span>
   </div>
 </div>
 
@@ -286,74 +339,229 @@ const EVENT_TYPES = {
   'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
 };
 
+const GROUP_COLORS = [
+  { border: 'rgba(94,92,230,0.6)',  bg: 'rgba(94,92,230,0.06)',  label: 'rgba(94,92,230,0.18)',  text: '#a09ef5' },
+  { border: 'rgba(255,159,10,0.6)', bg: 'rgba(255,159,10,0.06)', label: 'rgba(255,159,10,0.18)', text: '#ffbe5c' },
+  { border: 'rgba(48,209,88,0.6)',  bg: 'rgba(48,209,88,0.06)',  label: 'rgba(48,209,88,0.18)',  text: '#5de68a' },
+  { border: 'rgba(255,69,58,0.6)',  bg: 'rgba(255,69,58,0.06)',  label: 'rgba(255,69,58,0.18)',  text: '#ff7b73' },
+  { border: 'rgba(100,210,255,0.6)',bg: 'rgba(100,210,255,0.06)',label: 'rgba(100,210,255,0.18)',text: '#7fd6ff' },
+  { border: 'rgba(255,100,180,0.6)',bg: 'rgba(255,100,180,0.06)',label: 'rgba(255,100,180,0.18)',text: '#ff80c0' },
+];
+
 let events = [];
+let groups = [];   // { id, name, colorIdx, nodeIndices[] }
+let groupIdCounter = 0;
+
 let selectedIdx = null;
-let selectedLink = null; // { nodeIdx, optionIdx }
-let selectedRouter = null; // { nodeIdx, optionIdx, routerIdx }
+let selectedIndices = new Set();  // multi-selection
+let selectedLink = null;
+let selectedRouter = null;
+let selectedGroupId = null;
+
 let panX = 40, panY = 40;
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
-let activeLinkDrag = null; // { fromNodeIdx, optionIdx, startX, startY, currentX, currentY }
-let draggingRouter = null; // { nodeIdx, optionIdx, routerIdx, offsetX, offsetY }
+let draggingMulti = false, multiDragOffsets = [];
+let activeLinkDrag = null;
+let draggingRouter = null;
 
+// Marquee selection
+let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
+
+// Group dragging
+let draggingGroupId = null, groupDragOffsets = [];
+
+// ── UTILITY ──
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
 }
 
-// ── UTILITY: INLINE EDITING HELPER ──
 function makeEditable(element, initialValue, isTextArea, onSave) {
   const input = document.createElement(isTextArea ? 'textarea' : 'input');
   input.className = isTextArea ? 'inline-edit-textarea' : 'inline-edit-input';
   input.value = initialValue;
-  
-  // Prevent drag & dblclick bleeding while editing
   input.onmousedown = e => e.stopPropagation();
   input.ondblclick = e => e.stopPropagation();
-
   const finish = () => {
     if (!input.parentNode) return;
     const val = input.value;
     input.parentNode.replaceChild(element, input);
     onSave(val);
   };
-
   input.onblur = finish;
   input.onkeydown = e => {
-    if (e.key === 'Enter' && (!isTextArea || !e.shiftKey)) {
-      e.preventDefault();
-      input.blur();
-    }
+    if (e.key === 'Enter' && (!isTextArea || !e.shiftKey)) { e.preventDefault(); input.blur(); }
   };
-
   element.parentNode.replaceChild(input, element);
   input.focus();
   input.selectionStart = input.selectionEnd = input.value.length;
 }
 
-// ── RENDER CONTROLLER PIPELINE ──
+// ── GROUP LOGIC ──
+
+// Flood-fill: given a seed set of node indices, expand to include all reachable nodes via connections
+function expandGroupToLinked(seedIndices) {
+  const result = new Set(seedIndices);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    events.forEach((ev, i) => {
+      if (!result.has(i)) return;
+      (ev.options || []).forEach(opt => {
+        if (opt.nextId !== -1 && events[opt.nextId] && !result.has(opt.nextId)) {
+          result.add(opt.nextId); changed = true;
+        }
+      });
+      // Also expand backwards: find any node that links TO i
+      events.forEach((ev2, j) => {
+        if (result.has(j)) return;
+        if ((ev2.options || []).some(opt => opt.nextId === i)) {
+          result.add(j); changed = true;
+        }
+      });
+    });
+  }
+  return result;
+}
+
+function createGroup(nodeIndicesSet) {
+  const expanded = expandGroupToLinked(nodeIndicesSet);
+  // Remove these nodes from any existing groups
+  groups.forEach(g => {
+    g.nodeIndices = g.nodeIndices.filter(i => !expanded.has(i));
+  });
+  groups = groups.filter(g => g.nodeIndices.length > 0);
+  const colorIdx = groupIdCounter % GROUP_COLORS.length;
+  groups.push({ id: groupIdCounter++, name: `Group ${groupIdCounter}`, colorIdx, nodeIndices: [...expanded] });
+  renderGroups();
+}
+
+function deleteGroup(id) {
+  groups = groups.filter(g => g.id !== id);
+  if (selectedGroupId === id) selectedGroupId = null;
+  renderGroups();
+}
+
+function ungroupAll() {
+  if (selectedGroupId !== null) {
+    deleteGroup(selectedGroupId);
+  }
+}
+
+// Get bounding box of a group (in canvas coords)
+function getGroupBounds(g) {
+  const PAD = 28;
+  const HEADER = 32;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  g.nodeIndices.forEach(i => {
+    const ev = events[i];
+    if (!ev) return;
+    // Approximate node height: 44 header + 60 body + options rows
+    const optH = (ev.options?.length || 0) * 37 + (ev.options?.length < 4 ? 36 : 0);
+    const h = 44 + 60 + (ev.options?.length > 0 ? optH : 36);
+    if (ev.x < minX) minX = ev.x;
+    if (ev.y < minY) minY = ev.y;
+    if (ev.x + 250 > maxX) maxX = ev.x + 250;
+    if (ev.y + h > maxY) maxY = ev.y + h;
+  });
+  return {
+    x: minX - PAD,
+    y: minY - PAD - HEADER,
+    w: maxX - minX + PAD * 2,
+    h: maxY - minY + PAD * 2 + HEADER
+  };
+}
+
+function renderGroups() {
+  const layer = document.getElementById('groups-layer');
+  layer.innerHTML = '';
+  groups.forEach(g => {
+    if (g.nodeIndices.length === 0) return;
+    const bounds = getGroupBounds(g);
+    const col = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
+    const isSelected = selectedGroupId === g.id;
+
+    const frame = document.createElement('div');
+    frame.className = 'group-frame' + (isSelected ? ' group-selected' : '');
+    frame.style.left = `${bounds.x}px`;
+    frame.style.top = `${bounds.y}px`;
+    frame.style.width = `${bounds.w}px`;
+    frame.style.height = `${bounds.h}px`;
+    frame.style.borderColor = col.border;
+    frame.style.background = col.bg;
+
+    const label = document.createElement('div');
+    label.className = 'group-label';
+    label.style.background = col.label;
+    label.style.color = col.text;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'group-label-text';
+    nameSpan.textContent = g.name;
+    nameSpan.title = 'Double-click to rename';
+    nameSpan.ondblclick = (e) => {
+      e.stopPropagation();
+      makeEditable(nameSpan, g.name, false, (val) => {
+        g.name = val || g.name;
+        nameSpan.textContent = g.name;
+      });
+    };
+
+    const ungroupBtn = document.createElement('span');
+    ungroupBtn.className = 'group-ungroup-btn';
+    ungroupBtn.textContent = '✕ ungroup';
+    ungroupBtn.title = 'Remove group';
+    ungroupBtn.onmousedown = (e) => { e.stopPropagation(); deleteGroup(g.id); };
+
+    label.appendChild(nameSpan);
+    label.appendChild(ungroupBtn);
+    frame.appendChild(label);
+
+    // Group drag: drag the label header to move all member nodes
+    label.addEventListener('mousedown', (e) => {
+      if (e.target === ungroupBtn) return;
+      e.stopPropagation();
+      selectedGroupId = g.id;
+      selectedIdx = null;
+      selectedIndices.clear();
+      draggingGroupId = g.id;
+      groupDragOffsets = g.nodeIndices.map(i => ({
+        idx: i,
+        ox: e.clientX - events[i].x,
+        oy: e.clientY - events[i].y
+      }));
+      renderGroups();
+    });
+
+    layer.appendChild(frame);
+  });
+}
+
+// ── RENDER CANVAS ──
 function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
-  
+
   events.forEach((ev, i) => {
     const cfg = getTypeConfig(ev.type);
     const div = document.createElement('div');
-    div.className = 'node' + (i === selectedIdx ? ' active' : '');
+    const isActive = i === selectedIdx;
+    const isMulti = selectedIndices.has(i);
+    div.className = 'node' + (isActive ? ' active' : '') + (isMulti && !isActive ? ' multi-selected' : '');
     div.style.left = `${ev.x}px`;
     div.style.top = `${ev.y}px`;
     div.setAttribute('data-idx', i);
-    
+
     const inputAnchor = document.createElement('div');
     inputAnchor.className = 'node-input-anchor';
-    
+
     const nHead = document.createElement('div');
     nHead.className = 'node-header';
-    
+
     const nIdx = document.createElement('span');
     nIdx.className = 'node-idx';
     nIdx.textContent = `[${i}]`;
 
-    // FEATURE 0: Double click to edit Define Macro
     const nTitle = document.createElement('span');
     nTitle.className = 'node-title';
     nTitle.textContent = ev.define || '(no define)';
@@ -377,8 +585,7 @@ function renderCanvas() {
     nHead.appendChild(nIdx);
     nHead.appendChild(nTitle);
     nHead.appendChild(nBadge);
-    
-    // FEATURE 1: Double click to edit Message Payload
+
     const nBody = document.createElement('div');
     nBody.className = 'node-body';
     nBody.textContent = ev.message || '(Empty Text String)';
@@ -392,20 +599,19 @@ function renderCanvas() {
         generateCode();
       });
     };
-    
+
     div.appendChild(inputAnchor);
     div.appendChild(nHead);
     div.appendChild(nBody);
 
     const optsCont = document.createElement('div');
     optsCont.className = 'node-options';
-    
+
     if (ev.options && ev.options.length > 0) {
       ev.options.forEach((opt, optIdx) => {
         const optRow = document.createElement('div');
         optRow.className = 'node-opt-row';
-        
-        // FEATURE 2: Double click to edit Option Text
+
         const optTxt = document.createElement('span');
         optTxt.className = 'node-opt-text';
         optTxt.textContent = `${optIdx + 1}. ${opt.message || 'Option'}`;
@@ -419,7 +625,7 @@ function renderCanvas() {
             generateCode();
           });
         };
-        
+
         const nextLbl = document.createElement('span');
         nextLbl.style.fontSize = '9px'; nextLbl.style.padding = '2px 4px'; nextLbl.style.borderRadius = '3px';
         if (opt.nextId === -1) {
@@ -447,54 +653,31 @@ function renderCanvas() {
         e.stopPropagation();
         if (!events[i].options) events[i].options = [];
         events[i].options.push({ message: 'New Option', nextId: -1 });
-        renderCanvas(); 
-        selectEvent(i); 
+        renderCanvas();
+        selectEvent(i);
       };
       optsCont.appendChild(addBtn);
     }
-    
+
     div.appendChild(optsCont);
     div.onmousedown = (e) => onNodeMouseDown(e, i);
     container.appendChild(div);
   });
 
+  renderGroups();
   updateCanvasTransform();
   drawConnections();
 }
-// ── ROUTER PATH BUILDER ──
+
+// ── PATH BUILDER ──
 function buildPathWithRouters(startX, startY, endX, endY, routers) {
   if (!routers || routers.length === 0) {
     const cp1X = startX + 70, cp1Y = startY;
     const cp2X = endX   - 70, cp2Y = endY;
     return `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
   }
-  // With routers: straight polyline through all points
   const pts = [{ x: startX, y: startY }, ...routers, { x: endX, y: endY }];
   return `M ${pts.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-}
-
-// Given a t ∈ [0,1] along a cubic bezier, return the point
-function cubicBezierPoint(p0, p1, p2, p3, t) {
-  const mt = 1 - t;
-  return {
-    x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
-    y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
-  };
-}
-
-// Find approximate point at parameter t along the full multi-segment path
-function getPointOnPath(startX, startY, endX, endY, routers, t) {
-  const pts = [{ x: startX, y: startY }, ...(routers || []), { x: endX, y: endY }];
-  const segCount = pts.length - 1;
-  const segT = t * segCount;
-  const segIdx = Math.min(Math.floor(segT), segCount - 1);
-  const localT = segT - segIdx;
-  const p0 = pts[segIdx], p1 = pts[segIdx + 1];
-  const dx = p1.x - p0.x;
-  const pull = Math.max(60, Math.abs(dx) * 0.4);
-  const cp1 = { x: p0.x + pull, y: p0.y };
-  const cp2 = { x: p1.x - pull, y: p1.y };
-  return cubicBezierPoint(p0, cp1, cp2, p1, localT);
 }
 
 function drawConnections() {
@@ -502,7 +685,6 @@ function drawConnections() {
   svg.innerHTML = '';
   const canvasRect = document.getElementById('canvas').getBoundingClientRect();
   const nodesLayer = document.getElementById('nodes-layer');
-  // Remove old router DOM elements
   nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
 
   events.forEach((ev, i) => {
@@ -546,7 +728,6 @@ function drawConnections() {
       group.appendChild(hitPath);
       group.appendChild(visPath);
 
-      // ── CTRL+CLICK ON CONNECTION → Insert router at click position ──
       group.addEventListener('click', (e) => {
         if (!e.ctrlKey && !e.metaKey) return;
         e.stopPropagation();
@@ -555,8 +736,6 @@ function drawConnections() {
         const clickY = e.clientY - canvasRect.top;
         if (!opt.routers) opt.routers = [];
         const newPt = { x: clickX, y: clickY };
-
-        // Find closest segment by projecting click onto each line segment
         const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
         let bestSegIdx = 0, bestDist = Infinity;
         for (let k = 0; k < allPts.length - 1; k++) {
@@ -564,7 +743,6 @@ function drawConnections() {
           const bx = allPts[k+1].x, by = allPts[k+1].y;
           const dx = bx - ax, dy = by - ay;
           const lenSq = dx*dx + dy*dy;
-          // Project click onto segment, clamp to [0,1]
           const t = lenSq > 0 ? Math.max(0, Math.min(1, ((clickX-ax)*dx + (clickY-ay)*dy) / lenSq)) : 0;
           const closestX = ax + t*dx, closestY = ay + t*dy;
           const dist = Math.hypot(clickX - closestX, clickY - closestY);
@@ -584,7 +762,6 @@ function drawConnections() {
 
       svg.appendChild(group);
 
-      // ── RENDER ROUTER DIAMONDS as DOM elements (for easy drag) ──
       opt.routers.forEach((router, routerIdx) => {
         const isSelRouter = selectedRouter &&
           selectedRouter.nodeIdx === i &&
@@ -593,7 +770,6 @@ function drawConnections() {
 
         const rdiv = document.createElement('div');
         rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
-        // Position: center of diamond at router coords
         rdiv.style.left = `${router.x}px`;
         rdiv.style.top = `${router.y}px`;
         rdiv.setAttribute('data-node-idx', i);
@@ -638,42 +814,87 @@ function updateCanvasTransform() {
   document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
 }
 
-// ── SURGICAL EVENTS HOOKUPS (No Full Canvas Re-rendering!) ──
+// ── INPUT HANDLERS ──
+
 function onCanvasMouseDown(e) {
-  if (e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas') {
-    isPanning = true;
-    startPanX = e.clientX - panX;
-    startPanY = e.clientY - panY;
-    selectedLink = null;
-    selectedRouter = null;
-    selectEvent(null); // Just un-focuses UI, does not destroy DOM
+  const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
+  if (!onBg) return;
+
+  if (e.shiftKey) {
+    // Start marquee selection
+    isMarquee = true;
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    marqueeStartX = e.clientX - containerRect.left;
+    marqueeStartY = e.clientY - containerRect.top;
+    const marquee = document.getElementById('marquee');
+    marquee.style.left = `${marqueeStartX}px`;
+    marquee.style.top = `${marqueeStartY}px`;
+    marquee.style.width = '0px';
+    marquee.style.height = '0px';
+    marquee.style.display = 'block';
+    return;
   }
+
+  isPanning = true;
+  startPanX = e.clientX - panX;
+  startPanY = e.clientY - panY;
+  selectedLink = null;
+  selectedRouter = null;
+  selectedIndices.clear();
+  selectedGroupId = null;
+  selectEvent(null);
 }
 
 function selectEvent(idx) {
   selectedIdx = idx;
-  
-  // Surgically update the CSS classes without destroying the DOM elements!
   document.querySelectorAll('.node').forEach(node => {
-    if (idx !== null && parseInt(node.getAttribute('data-idx')) === idx) {
-      node.classList.add('active');
-    } else {
-      node.classList.remove('active');
-    }
+    const nodeIdx = parseInt(node.getAttribute('data-idx'));
+    node.classList.remove('active', 'multi-selected');
+    if (idx !== null && nodeIdx === idx) node.classList.add('active');
+    else if (selectedIndices.has(nodeIdx)) node.classList.add('multi-selected');
   });
-
   drawConnections();
   renderForm();
   generateCode();
 }
 
 function onNodeMouseDown(e, idx) {
-  if (e.target.classList.contains('node-output-handle')) return; 
+  if (e.target.classList.contains('node-output-handle')) return;
   e.stopPropagation();
   selectedLink = null;
   selectedRouter = null;
+  selectedGroupId = null;
+
+  if (e.shiftKey) {
+    // Toggle into multi-selection
+    if (selectedIndices.has(idx)) selectedIndices.delete(idx);
+    else selectedIndices.add(idx);
+    if (selectedIdx !== null) { selectedIndices.add(selectedIdx); selectedIdx = null; }
+    selectEvent(null);
+    // Start multi-drag immediately
+    draggingMulti = true;
+    multiDragOffsets = [...selectedIndices].map(i => ({
+      idx: i,
+      ox: e.clientX - events[i].x,
+      oy: e.clientY - events[i].y
+    }));
+    return;
+  }
+
+  // If clicking a node that's already in multi-selection, drag the whole group
+  if (selectedIndices.size > 0 && selectedIndices.has(idx)) {
+    draggingMulti = true;
+    multiDragOffsets = [...selectedIndices].map(i => ({
+      idx: i,
+      ox: e.clientX - events[i].x,
+      oy: e.clientY - events[i].y
+    }));
+    return;
+  }
+
+  // Normal single-node select
+  selectedIndices.clear();
   selectEvent(idx);
-  
   draggingNodeIdx = idx;
   dragOffsetX = e.clientX - events[idx].x;
   dragOffsetY = e.clientY - events[idx].y;
@@ -681,6 +902,19 @@ function onNodeMouseDown(e, idx) {
 
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+  // Ctrl+G — group selected nodes
+  if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+    e.preventDefault();
+    const seed = selectedIndices.size > 0 ? new Set(selectedIndices) : (selectedIdx !== null ? new Set([selectedIdx]) : null);
+    if (seed && seed.size > 0) {
+      createGroup(seed);
+      selectedIndices.clear();
+      selectEvent(null);
+    }
+    return;
+  }
+
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedRouter) {
       const { nodeIdx, optionIdx, routerIdx } = selectedRouter;
@@ -691,6 +925,27 @@ window.addEventListener('keydown', (e) => {
       events[selectedLink.nodeIdx].options[selectedLink.optionIdx].nextId = -1;
       selectedLink = null;
       renderCanvas(); generateCode();
+    } else if (selectedGroupId !== null) {
+      deleteGroup(selectedGroupId);
+    } else if (selectedIndices.size > 0) {
+      // Delete all selected nodes (highest index first to preserve refs)
+      const toDelete = [...selectedIndices].sort((a, b) => b - a);
+      toDelete.forEach(idx => {
+        events.forEach(ev => {
+          ev.options.forEach(opt => {
+            if (opt.nextId === idx) opt.nextId = -1;
+            else if (opt.nextId > idx) opt.nextId--;
+          });
+        });
+        groups.forEach(g => {
+          g.nodeIndices = g.nodeIndices.map(i => i > idx ? i - 1 : i).filter(i => i !== idx);
+        });
+        events.splice(idx, 1);
+      });
+      groups = groups.filter(g => g.nodeIndices.length > 0);
+      selectedIndices.clear();
+      selectedIdx = events.length > 0 ? 0 : null;
+      renderCanvas(); renderForm(); generateCode();
     } else if (selectedIdx !== null) {
       deleteEvent();
     }
@@ -711,39 +966,79 @@ function onHandleMouseDown(e, nodeIdx, optionIdx) {
 }
 
 window.onmousemove = (e) => {
+  if (isMarquee) {
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    const curX = e.clientX - containerRect.left;
+    const curY = e.clientY - containerRect.top;
+    const x = Math.min(curX, marqueeStartX);
+    const y = Math.min(curY, marqueeStartY);
+    const w = Math.abs(curX - marqueeStartX);
+    const h = Math.abs(curY - marqueeStartY);
+    const marquee = document.getElementById('marquee');
+    marquee.style.left = `${x}px`;
+    marquee.style.top = `${y}px`;
+    marquee.style.width = `${w}px`;
+    marquee.style.height = `${h}px`;
+
+    // Highlight nodes inside the marquee (in canvas space)
+    const mx1 = (x - panX), my1 = (y - panY);
+    const mx2 = mx1 + w, my2 = my1 + h;
+    selectedIndices.clear();
+    events.forEach((ev, i) => {
+      const nx = ev.x, ny = ev.y, nw = 250, nh = 100;
+      if (nx + nw > mx1 && nx < mx2 && ny + nh > my1 && ny < my2) {
+        selectedIndices.add(i);
+      }
+    });
+    document.querySelectorAll('.node').forEach(node => {
+      const idx = parseInt(node.getAttribute('data-idx'));
+      node.classList.toggle('multi-selected', selectedIndices.has(idx));
+    });
+    return;
+  }
+
   if (isPanning) {
     panX = e.clientX - startPanX; panY = e.clientY - startPanY;
     updateCanvasTransform();
+  } else if (draggingGroupId !== null) {
+    groupDragOffsets.forEach(({ idx, ox, oy }) => {
+      events[idx].x = e.clientX - ox;
+      events[idx].y = e.clientY - oy;
+      const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
+      if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
+    });
+    renderGroups();
+    drawConnections();
+  } else if (draggingMulti) {
+    multiDragOffsets.forEach(({ idx, ox, oy }) => {
+      events[idx].x = e.clientX - ox;
+      events[idx].y = e.clientY - oy;
+      const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
+      if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
+    });
+    renderGroups();
+    drawConnections();
   } else if (draggingRouter !== null) {
     const { nodeIdx, optionIdx, routerIdx, offsetX, offsetY } = draggingRouter;
     const opt = events[nodeIdx].options[optionIdx];
     if (opt && opt.routers && opt.routers[routerIdx]) {
       opt.routers[routerIdx].x = e.clientX - offsetX;
       opt.routers[routerIdx].y = e.clientY - offsetY;
-      // Surgically move the router DOM element
       const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
-      if (rdiv) {
-        rdiv.style.left = `${opt.routers[routerIdx].x}px`;
-        rdiv.style.top = `${opt.routers[routerIdx].y}px`;
-      }
+      if (rdiv) { rdiv.style.left = `${opt.routers[routerIdx].x}px`; rdiv.style.top = `${opt.routers[routerIdx].y}px`; }
       drawConnections();
     }
   } else if (draggingNodeIdx !== null) {
     events[draggingNodeIdx].x = e.clientX - dragOffsetX;
     events[draggingNodeIdx].y = e.clientY - dragOffsetY;
-    
-    // Surgically update position for extreme smoothness (does not break inputs/DOM!)
     const nodeEl = document.querySelector(`.node[data-idx="${draggingNodeIdx}"]`);
-    if (nodeEl) {
-      nodeEl.style.left = `${events[draggingNodeIdx].x}px`;
-      nodeEl.style.top = `${events[draggingNodeIdx].y}px`;
-    }
+    if (nodeEl) { nodeEl.style.left = `${events[draggingNodeIdx].x}px`; nodeEl.style.top = `${events[draggingNodeIdx].y}px`; }
+    renderGroups();
     drawConnections();
   } else if (activeLinkDrag) {
     const canvasRect = document.getElementById('canvas').getBoundingClientRect();
     activeLinkDrag.currentX = e.clientX - canvasRect.left;
     activeLinkDrag.currentY = e.clientY - canvasRect.top;
-    
     let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     for (let el of elements) {
@@ -753,8 +1048,6 @@ window.onmousemove = (e) => {
         if (idx !== activeLinkDrag.fromNodeIdx) { hoveredIdx = idx; break; }
       }
     }
-    
-    // Surgically apply hover styles to input anchors
     document.querySelectorAll('.node-input-anchor').forEach(anc => anc.classList.remove('drag-over'));
     if (hoveredIdx !== null) {
       const targetAnc = document.querySelector(`.node[data-idx="${hoveredIdx}"] .node-input-anchor`);
@@ -765,7 +1058,19 @@ window.onmousemove = (e) => {
 };
 
 window.onmouseup = (e) => {
-  isPanning = false; draggingNodeIdx = null; draggingRouter = null;
+  if (isMarquee) {
+    isMarquee = false;
+    document.getElementById('marquee').style.display = 'none';
+    // Keep selection, just stop drawing
+    return;
+  }
+
+  isPanning = false;
+  draggingNodeIdx = null;
+  draggingRouter = null;
+  draggingMulti = false;
+  draggingGroupId = null;
+
   if (activeLinkDrag) {
     let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
@@ -779,7 +1084,7 @@ window.onmouseup = (e) => {
     events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = (hoveredIdx !== null) ? hoveredIdx : -1;
     events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
     activeLinkDrag = null;
-    renderCanvas(); // Re-render canvas safely now that drag is over
+    renderCanvas();
     renderForm();
     generateCode();
   }
@@ -796,7 +1101,6 @@ function renderForm() {
   }
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('event-form').style.display = 'block';
-  
   const ev = events[selectedIdx];
   document.getElementById('f-define').value = ev.define || '';
   document.getElementById('f-message').value = ev.message || '';
@@ -867,12 +1171,17 @@ function newEvent() {
 
 function deleteEvent() {
   if (selectedIdx === null || !confirm(`Permanently drop node array element frame index references [${selectedIdx}]?`)) return;
+  const idx = selectedIdx;
   events.forEach(ev => {
     ev.options.forEach(opt => {
-      if (opt.nextId === selectedIdx) opt.nextId = -1; else if (opt.nextId > selectedIdx) opt.nextId--;
+      if (opt.nextId === idx) opt.nextId = -1; else if (opt.nextId > idx) opt.nextId--;
     });
   });
-  events.splice(selectedIdx, 1);
+  groups.forEach(g => {
+    g.nodeIndices = g.nodeIndices.map(i => i > idx ? i - 1 : i).filter(i => i !== idx);
+  });
+  groups = groups.filter(g => g.nodeIndices.length > 0);
+  events.splice(idx, 1);
   selectedIdx = events.length > 0 ? 0 : null;
   renderCanvas(); renderForm(); generateCode();
 }
@@ -906,8 +1215,9 @@ function generateCode() {
 }
 
 function exportJSON() {
+  const data = { events, groups, groupIdCounter };
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   a.download = 'vidas_secas_canvas_nodes.json'; a.click();
 }
 
@@ -918,12 +1228,20 @@ function importJSON() {
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        events = JSON.parse(ev.target.result).map((item, idx) => ({
-          ...item, x: item.x !== undefined ? item.x : 60 + (idx * 280) % 1200, y: item.y !== undefined ? item.y : 60 + Math.floor(idx / 4) * 220
-        }));
+        const parsed = JSON.parse(ev.target.result);
+        // Support old format (array) and new format (object with events+groups)
+        if (Array.isArray(parsed)) {
+          events = parsed.map((item, idx) => ({ ...item, x: item.x ?? 60 + (idx*280)%1200, y: item.y ?? 60 + Math.floor(idx/4)*220 }));
+          groups = []; groupIdCounter = 0;
+        } else {
+          events = (parsed.events || []).map((item, idx) => ({ ...item, x: item.x ?? 60 + (idx*280)%1200, y: item.y ?? 60 + Math.floor(idx/4)*220 }));
+          groups = parsed.groups || [];
+          groupIdCounter = parsed.groupIdCounter || 0;
+        }
         selectedIdx = events.length > 0 ? 0 : null;
+        selectedIndices.clear();
         renderCanvas(); renderForm(); generateCode();
-      } catch(err) { alert('Parser execution error loading node workspace structures maps configs: ' + err.message); }
+      } catch(err) { alert('Parser error: ' + err.message); }
     };
     reader.readAsText(file);
   };
