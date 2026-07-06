@@ -1446,23 +1446,39 @@ function switchTab(tab) {
 }
 
 function generateCode() {
-  if (events.length === 0) return document.getElementById('code-output').textContent = '// Empty canvas arrays metrics models profiles parameters.';
+  // 1. Calculate incoming links for all events
+  const incomingCounts = new Array(events.length).fill(0);
+  events.forEach(ev => {
+    (ev.options || []).forEach(opt => {
+      if (opt.nextId >= 0 && opt.nextId < events.length) {
+        incomingCounts[opt.nextId]++;
+      }
+    });
+  });
+
   const lines = [];
-  const defs = events.map((ev, i) => ev.define ? [ev.define, i] : null).filter(Boolean);
-  if (defs.length > 0) {
-    lines.push('// ── Event index defines ──────────────────────────');
-    defs.forEach(([name, idx]) => lines.push(`#define ${name.padEnd(24)} ${idx}`));
-    lines.push('');
-  }
-  lines.push(`// ── Event setup (put in main or init) ────────────`);
   lines.push(`Event events[${events.length}] = {0};`);
   lines.push('');
+  
   events.forEach((ev, i) => {
     const comment = ev.define ? `/* ${ev.define} */` : `/* [${i}] */`;
+    const hasOutgoing = ev.options && ev.options.length > 0;
+
+    // 2. A node starts a chain if it has NO incoming links AND AT LEAST 1 outgoing link
+    if (incomingCounts[i] === 0 && hasOutgoing) {
+      lines.push(`// ---${ev.define ? ev.define : "CHAIN START"}---`);
+    }
+
+    // Existing generation logic
     lines.push(`events[${i}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
-    ev.options.forEach(opt => lines.push(`addOption(&events[${i}], "${escapeCStr(opt.message)}", ${opt.nextId});`));
-    if (ev.options.length > 0) lines.push('');
+    
+    (ev.options || []).forEach(opt => {
+      lines.push(`addOption(&events[${i}], "${escapeCStr(opt.message)}", ${opt.nextId});`);
+    });
+    
+    if (hasOutgoing) lines.push('');
   });
+  
   document.getElementById('code-output').textContent = lines.join('\n');
 }
 
