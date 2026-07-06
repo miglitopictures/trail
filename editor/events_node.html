@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Vidas Secas — Node Canvas Editor</title>
+<title>VS | Event Editor</title>
 <style>
   :root {
     --bg:        #16161a;
@@ -291,7 +291,7 @@
 
 <header>
   <h1>Vidas Secas</h1>
-  <span class="subtitle">Interactive Canvas Workflow</span>
+  <span class="subtitle">Event Editor</span>
   <div class="header-actions">
     <button class="btn btn-sm" onclick="importJSON()">Import JSON</button>
     <button class="btn btn-sm" onclick="exportJSON()">Export JSON</button>
@@ -309,6 +309,7 @@
   <div class="canvas-actions">
     <button class="btn btn-primary" onclick="newEvent()">+ Add Story Node</button>
     <button class="btn" onclick="resetView()">Center View</button>
+    <button class="btn btn-danger" onclick="resetHistory()" >Reset Board</button>
     <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+click line for router</span>
   </div>
 </div>
@@ -326,11 +327,11 @@
     <div id="event-form" style="display:none">
       <div class="field-group">
         <div class="field-label">C Macro #define Name</div>
-        <input type="text" id="f-define" placeholder="e.g. EMPTY_HOUSE" oninput="onFieldChange()">
+        <input type="text" id="f-define" placeholder="e.g. EMPTY_HOUSE" onchange="onFieldChange()">
       </div>
       <div class="field-group">
         <div class="field-label">Message Payload String (<span id="char-count">0</span>/255)</div>
-        <textarea id="f-message" maxlength="255" oninput="onFieldChange()"></textarea>
+        <textarea id="f-message" maxlength="255" onchange="onFieldChange()"></textarea>
       </div>
       <div class="field-group">
         <div class="field-label">Structural State Type</div>
@@ -359,8 +360,8 @@
 const EVENT_TYPES = {
   'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.35)' },
   'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.35)' },
-  'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.35)' },
-  'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
+//   'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.35)' },
+//   'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
 };
 
 const GROUP_COLORS = [
@@ -397,6 +398,74 @@ let draggingGroupId = null, groupDragOffsets = [];
 let groupRouterOffsets = [];
 let multiRouterOffsets = [];
 
+// ── HISTORY MANAGEMENT (UNDO) ──
+const MAX_HISTORY = 20; // Keeps up to 20 states
+let historyStack = [];
+let historyIndex = -1;
+
+function saveState() {
+  // Deep clone the current state
+  const currentState = JSON.stringify({ events, groups, groupIdCounter });
+  
+  // Prevent duplicate consecutive states
+  if (historyIndex >= 0 && historyStack[historyIndex] === currentState) return;
+
+  // If we undid something and are making a new change, truncate the future
+  if (historyIndex < historyStack.length - 1) {
+    historyStack = historyStack.slice(0, historyIndex + 1);
+  }
+
+  historyStack.push(currentState);
+  
+  // Enforce history limit
+  if (historyStack.length > MAX_HISTORY) {
+    historyStack.shift();
+  } else {
+    historyIndex++;
+  }
+
+  // Persist to localStorage
+  localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+}
+
+function undo() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    const stateStr = historyStack[historyIndex];
+    if (stateStr) {
+      const parsed = JSON.parse(stateStr);
+      events = parsed.events || [];
+      groups = parsed.groups || [];
+      groupIdCounter = parsed.groupIdCounter || 0;
+
+      // Clear selections to prevent referencing deleted indices
+      selectedIdx = null;
+      selectedIndices.clear();
+      selectedLink = null;
+      selectedRouter = null;
+
+      // Update LocalStorage index
+      localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+
+      // Re-render everything
+      renderCanvas();
+      renderForm();
+      generateCode();
+    }
+  }
+}
+
+function resetHistory() {
+    // Add a confirmation so you don't accidentally wipe hours of work!
+    if (confirm("Are you sure you want to clear the board and erase all history? This cannot be undone.")) {
+        // 1. Delete the saved history from Local Storage
+        localStorage.removeItem('vidas_secas_history');
+        
+        // 2. Refresh the page to load the default hardcoded seed
+        location.reload(); 
+    }
+}
+
 // ── UTILITY ──
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
@@ -421,6 +490,7 @@ function makeEditable(element, initialValue, isTextArea, onSave) {
   element.parentNode.replaceChild(input, element);
   input.focus();
   input.selectionStart = input.selectionEnd = input.value.length;
+//   saveState();
 }
 
 // ── GROUP LOGIC ──
@@ -460,12 +530,14 @@ function createGroup(nodeIndicesSet) {
   const colorIdx = groupIdCounter % GROUP_COLORS.length;
   groups.push({ id: groupIdCounter++, name: `Group ${groupIdCounter}`, colorIdx, nodeIndices: [...expanded] });
   renderGroups();
+  saveState();
 }
 
 function deleteGroup(id) {
   groups = groups.filter(g => g.id !== id);
   if (selectedGroupId === id) selectedGroupId = null;
   renderGroups();
+  saveState();
 }
 
 function ungroupAll() {
@@ -561,6 +633,7 @@ function renderGroups() {
       makeEditable(nameSpan, g.name, false, (val) => {
         g.name = val || g.name;
         nameSpan.textContent = g.name;
+        saveState();
       });
     };
 
@@ -676,6 +749,8 @@ function renderCanvas() {
         nTitle.textContent = events[i].define || '(no define)';
         if (selectedIdx === i) renderForm();
         generateCode();
+        saveState();
+
       });
     };
 
@@ -700,6 +775,8 @@ function renderCanvas() {
         nBody.textContent = val || '(Empty Text String)';
         if (selectedIdx === i) renderForm();
         generateCode();
+        saveState();
+
       });
     };
 
@@ -726,6 +803,8 @@ function renderCanvas() {
             optTxt.textContent = `${optIdx + 1}. ${val || 'Option'}`;
             if (selectedIdx === i) renderForm();
             generateCode();
+            saveState();
+
           });
         };
 
@@ -1016,6 +1095,13 @@ function onNodeMouseDown(e, idx) {
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+    return;
+  }
+
   // Ctrl+G — group selected nodes
   if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
     e.preventDefault();
@@ -1024,6 +1110,7 @@ window.addEventListener('keydown', (e) => {
       createGroup(seed);
       selectedIndices.clear();
       selectEvent(null);
+      saveState();
     }
     return;
   }
@@ -1062,6 +1149,7 @@ window.addEventListener('keydown', (e) => {
     } else if (selectedIdx !== null) {
       deleteEvent();
     }
+    saveState();
   }
 });
 
@@ -1200,6 +1288,10 @@ window.onmouseup = (e) => {
     return;
   }
 
+  // Track if a modification actually happened
+  const stateChanged = draggingNodeIdx !== null || draggingRouter !== null || draggingMulti || draggingGroupId !== null || activeLinkDrag !== null;
+
+
   isPanning = false;
   draggingNodeIdx = null;
   draggingRouter = null;
@@ -1223,6 +1315,9 @@ window.onmouseup = (e) => {
     renderForm();
     generateCode();
   }
+
+  // Save state if items were moved or linked
+  if (stateChanged) saveState();
 };
 
 function resetView() { panX = 40; panY = 40; updateCanvasTransform(); }
@@ -1251,7 +1346,13 @@ function renderTypeSelector(activeType) {
     btn.className = 'type-btn' + (key === activeType ? ' active-type' : '');
     btn.textContent = typeDef.label;
     if (key === activeType) { btn.style.background = typeDef.bg; btn.style.borderColor = typeDef.border; btn.style.color = typeDef.fg; }
-    btn.onclick = () => { events[selectedIdx].type = key; renderCanvas(); renderTypeSelector(key); generateCode(); };
+    btn.onclick = () => {
+        events[selectedIdx].type = key;
+        renderCanvas();
+        renderTypeSelector(key);
+        generateCode();
+        saveState();
+    };
     container.appendChild(btn);
   });
 }
@@ -1285,9 +1386,21 @@ function renderOptions() {
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
 }
 
-function updateOptionData(optIdx, field, value) { events[selectedIdx].options[optIdx][field] = value; renderCanvas(); generateCode(); }
-function addOption() { events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 }); renderOptions(); renderCanvas(); generateCode(); }
-function removeOption(optIdx) { events[selectedIdx].options.splice(optIdx, 1); renderOptions(); renderCanvas(); generateCode(); }
+function updateOptionData(optIdx, field, value) {
+    events[selectedIdx].options[optIdx][field] = value;
+    renderCanvas(); generateCode();
+    saveState();
+}
+function addOption() {
+    events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
+function removeOption(optIdx) {
+    events[selectedIdx].options.splice(optIdx, 1);
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
 
 function onFieldChange() {
   const ev = events[selectedIdx];
@@ -1295,6 +1408,7 @@ function onFieldChange() {
   ev.message = document.getElementById('f-message').value;
   document.getElementById('char-count').textContent = ev.message.length;
   renderCanvas(); generateCode();
+  saveState();
 }
 
 function newEvent() {
@@ -1302,6 +1416,7 @@ function newEvent() {
   const y = -panY + 120 + (events.length * 45 % 300);
   events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
   renderCanvas(); selectEvent(events.length - 1);
+  saveState();
 }
 
 function deleteEvent() {
@@ -1320,6 +1435,7 @@ function deleteEvent() {
   events.splice(idx, 1);
   selectedIdx = events.length > 0 ? 0 : null;
   renderCanvas(); renderForm(); generateCode();
+  saveState();
 }
 
 function switchTab(tab) {
@@ -1351,36 +1467,87 @@ function generateCode() {
 }
 
 function exportJSON() {
-  const data = { events, groups, groupIdCounter };
+  // 1. Package the full state of the workspace
+  const projectState = {
+    events: events,
+    groups: groups,
+    groupIdCounter: groupIdCounter,
+    panX: panX,
+    panY: panY
+  };
+  
+  // 2. Convert to formatted JSON string
+  const dataStr = JSON.stringify(projectState, null, 2);
+  
+  // 3. Trigger the file download
+  const blob = new Blob([dataStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  a.download = 'vidas_secas_canvas_nodes.json'; a.click();
+  a.href = url;
+  a.download = "vidas_secas_project.json";
+  document.body.appendChild(a);
+  a.click();
+  
+  // Cleanup
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function importJSON() {
-  const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+  // 1. Create a hidden file input
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  
   input.onchange = e => {
-    const file = e.target.files[0]; if (!file) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = event => {
       try {
-        const parsed = JSON.parse(ev.target.result);
-        // Support old format (array) and new format (object with events+groups)
-        if (Array.isArray(parsed)) {
-          events = parsed.map((item, idx) => ({ ...item, x: item.x ?? 60 + (idx*280)%1200, y: item.y ?? 60 + Math.floor(idx/4)*220 }));
-          groups = []; groupIdCounter = 0;
-        } else {
-          events = (parsed.events || []).map((item, idx) => ({ ...item, x: item.x ?? 60 + (idx*280)%1200, y: item.y ?? 60 + Math.floor(idx/4)*220 }));
-          groups = parsed.groups || [];
-          groupIdCounter = parsed.groupIdCounter || 0;
+        // 2. Parse the uploaded JSON
+        const parsed = JSON.parse(event.target.result);
+        
+        // 3. Restore the data structures
+        events = parsed.events || [];
+        groups = parsed.groups || [];
+        groupIdCounter = parsed.groupIdCounter || 0;
+        
+        // 4. Restore the camera panning position
+        if (parsed.panX !== undefined && parsed.panY !== undefined) {
+          panX = parsed.panX;
+          panY = parsed.panY;
+          document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
         }
-        selectedIdx = events.length > 0 ? 0 : null;
+        
+        // 5. Clear all active selections to prevent phantom errors
+        selectedIdx = null;
         selectedIndices.clear();
-        renderCanvas(); renderForm(); generateCode();
-      } catch(err) { alert('Parser error: ' + err.message); }
+        selectedLink = null;
+        selectedRouter = null;
+        selectedGroupId = null;
+        
+        // 6. Force a complete re-render of all layers
+        renderCanvas();
+        renderGroups(); // Crucial for redrawing group frames and minimized states
+        renderForm();
+        generateCode();
+        
+        // 7. Inject this new imported state into the Undo/Redo history
+        saveState();
+        
+      } catch (err) {
+        console.error("Error parsing JSON:", err);
+        alert("Failed to import JSON file. The file might be corrupted or invalid.");
+      }
     };
+    
     reader.readAsText(file);
   };
+  
+  // Trigger the file picker
   input.click();
 }
 
@@ -1413,8 +1580,30 @@ const seed = [
   { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: 1150, y: 540 },
   { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: 1450, y: 540 },
 ];
-events = seed.map(e => ({ ...e, options: e.options.map(o => ({ ...o })) }));
-renderCanvas(); renderForm(); generateCode();
+// Check for stored history
+const storedHistory = localStorage.getItem('vidas_secas_history');
+if (storedHistory) {
+  const parsedHistory = JSON.parse(storedHistory);
+  historyStack = parsedHistory.stack;
+  historyIndex = parsedHistory.index;
+  
+  // Load the current active state
+  const currentStateStr = historyStack[historyIndex];
+  if (currentStateStr) {
+    const parsedState = JSON.parse(currentStateStr);
+    events = parsedState.events || [];
+    groups = parsedState.groups || [];
+    groupIdCounter = parsedState.groupIdCounter || 0;
+  }
+} else {
+  // If no history, load the default seed
+  events = seed.map(e => ({ ...e, options: e.options.map(o => ({ ...o })) }));
+  saveState(); // Create initial baseline history state
+}
+
+renderCanvas(); 
+renderForm(); 
+generateCode();
 </script>
 </body>
 </html>

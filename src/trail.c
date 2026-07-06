@@ -86,7 +86,7 @@ typedef struct {
 } Party;
 
 void rest(Party *party, int *hours){
-    // TODO: talvez implementar perda de comida durante o descanço
+    // TODO: talvez implementar perda de comida durante o descanso
     for (int i = 0; i < 4; i++){
         if (party->member[i].dead) continue;
         party->member[i].health += GetRandomValue(0,3);
