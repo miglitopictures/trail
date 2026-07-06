@@ -84,6 +84,17 @@ typedef struct {
     enum RationSize ration;
 } Party;
 
+void rest(Party *party, int *hours){
+    for (int i = 0; i < 4; i++){
+        if (party->member[i].dead) continue;
+        party->member[i].health += GetRandomValue(0,3);
+        party->member[i].energy += GetRandomValue(2,10);
+        party->member[i].health = clampInt(party->member[i].health, 0, 100);
+        party->member[i].energy = clampInt(party->member[i].energy, 0, 100);
+    }
+    *hours += 1;
+}
+
 enum EventType {
     EVENT_MESSAGE,
     EVENT_DETOUR,
@@ -347,14 +358,7 @@ int main()
 
         // Rest
         if (IsKeyPressed(KEY_D)) {
-            for (int i = 0; i < 4; i++){
-                if (party.member[i].dead) continue;
-                party.member[i].health += GetRandomValue(0,3);
-                party.member[i].energy += GetRandomValue(2,10);
-                party.member[i].health = clampInt(party.member[i].health, 0, 100);
-                party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
-            }
-            hours += 1;
+            rest(&party, &hours);
         }
         
         if (moving){
@@ -591,6 +595,7 @@ int main()
                 #define SUBMENU_NONE -1
                 #define SUBMENU_BUY   0
                 #define SUBMENU_SELL  1
+                // #define SUBMENU_REST  2
                 if (activeSubMenu == SUBMENU_NONE) {
 
                     // Draw city
@@ -619,7 +624,30 @@ int main()
                     {
                     // depending on the button clicked within the active option,  i want to enter a button specific "submenu", is there a way to do this without sabing a state? more imideate mode
                     case 0 /* Party */:  
-                        GuiButton((Rectangle) {40, 40, width, height}, "Rest");
+                        if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&party, &hours);
+                        // Draw status bar (party health)
+                        for (int i = 3; i >= 0; i--)
+                        {
+                            int size = 30;
+                            int posY = windowHeight - 120 - ((3-i)*30);
+                            Color textColor = party.member[i].health == 0 ? RED : WHITE;
+                            DrawText(party.member[i].name, 30, posY, 30, textColor);
+                            DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
+                            if (party.member[i].health == 0){
+                                DrawText("(dead)", 310, posY, 30, textColor);
+                                
+                            } else if (party.member[i].sick){
+                                DrawText("(sick)", 310, posY, 30, textColor);
+                                
+                            }
+                            DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
+                        }
+                        // Draw Hours, Distance, Food, Party Count
+                        {
+                            int size = 30;
+                            DrawText(TextFormat("Horas: %02d", hours),             30,  230, size, WHITE);
+                            DrawText(TextFormat("Food: %d", party.inventory.food), 30,  260, size, WHITE);
+                        }
                         break;
                     case 1 /* Car */:  
                         GuiButton((Rectangle) {40, 40, width, height}, "Repair");
@@ -660,7 +688,7 @@ int main()
                 {
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeSubMenu = SUBMENU_NONE;
-                } 
+                }
                 
                 
             }   
