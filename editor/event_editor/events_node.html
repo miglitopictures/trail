@@ -101,7 +101,8 @@ let selectedLink = null;
 let selectedRouter = null;
 let selectedGroupId = null;
 
-let panX = 40, panY = 40;
+const CANVAS_SIZE = 8000; // Virtual canvas dimensions — large enough to never clip connections
+let panX = 0, panY = 0;  // Will be set to center on init
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
@@ -117,7 +118,7 @@ let groupRouterOffsets = [];
 let multiRouterOffsets = [];
 
 // ── HISTORY MANAGEMENT (UNDO) ──
-const MAX_HISTORY = 20; // Keeps up to 20 states
+const MAX_HISTORY = 128; // Keeps up to 20 states
 let historyStack = [];
 let historyIndex = -1;
 
@@ -254,7 +255,7 @@ function createGroup(nodeIndicesSet) {
 function deleteGroup(id) {
   groups = groups.filter(g => g.id !== id);
   if (selectedGroupId === id) selectedGroupId = null;
-  renderGroups();
+  renderCanvas(); // Must use renderCanvas (not just renderGroups) so minimized-hidden nodes get re-rendered as visible
   saveState();
 }
 
@@ -721,7 +722,15 @@ function drawConnections() {
 }
 
 function updateCanvasTransform() {
-  document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
+  const canvas = document.getElementById('canvas');
+  canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+  // Ensure canvas and SVG layer always cover the full virtual area
+  canvas.style.width  = `${CANVAS_SIZE}px`;
+  canvas.style.height = `${CANVAS_SIZE}px`;
+  const svg = document.getElementById('svg-layer');
+  svg.style.width  = `${CANVAS_SIZE}px`;
+  svg.style.height = `${CANVAS_SIZE}px`;
+  svg.setAttribute('viewBox', `0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`);
 }
 
 // ── INPUT HANDLERS ──
@@ -1038,7 +1047,15 @@ window.onmouseup = (e) => {
   if (stateChanged) saveState();
 };
 
-function resetView() { panX = 40; panY = 40; updateCanvasTransform(); }
+function resetView() {
+  const container = document.getElementById('canvas-container');
+  const vw = container.clientWidth;
+  const vh = container.clientHeight;
+  // Place the canvas origin so the virtual center lands at the viewport center
+  panX = vw / 2 - CANVAS_SIZE / 2;
+  panY = vh / 2 - CANVAS_SIZE / 2;
+  updateCanvasTransform();
+}
 
 // ── PROPERTIES PANEL ──
 function renderForm() {
@@ -1130,8 +1147,12 @@ function onFieldChange() {
 }
 
 function newEvent() {
-  const x = -panX + 100 + (events.length * 25 % 200);
-  const y = -panY + 120 + (events.length * 45 % 300);
+  // Place new nodes near the current viewport center in canvas space
+  const container = document.getElementById('canvas-container');
+  const cx = container.clientWidth  / 2 - panX;
+  const cy = container.clientHeight / 2 - panY;
+  const x = cx - 125 + (events.length * 25 % 200);
+  const y = cy -  60 + (events.length * 45 % 300);
   events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
   renderCanvas(); selectEvent(events.length - 1);
   saveState();
@@ -1295,24 +1316,28 @@ function copyCode() {
 function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
+// Seed nodes are offset to the center of the virtual 8000×8000 canvas (CANVAS_SIZE/2 ≈ 4000).
+// Original layout spans ~0–1700 x, ~0–640 y; center of content ≈ (850, 290).
+// Offset = 4000 - 850 = 3150 in X,  4000 - 290 = 3710 in Y  → content sits at canvas center.
+const SEED_OX = 3150, SEED_OY = 3710;
 const seed = [
-  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: 40, y: 40 },
-  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: 310, y: 40 },
-  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: 580, y: 40 },
-  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], x: 850, y: 40 },
-  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], x: 40, y: 220 },
-  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], x: 310, y: 220 },
-  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], x: 580, y: 220 },
-  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], x: 850, y: 220 },
-  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], x: 40, y: 400 },
-  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], x: 310, y: 400 },
-  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], x: 580, y: 400 },
-  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], x: 1150, y: 40 },
-  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: 1450, y: 40 },
-  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], x: 1150, y: 280 },
-  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], x: 1450, y: 280 },
-  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: 1150, y: 540 },
-  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: 1450, y: 540 },
+  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+40 },
+  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+40 },
+  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+40 },
+  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+40 },
+  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+220 },
+  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+220 },
+  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+220 },
+  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+220 },
+  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+400 },
+  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], x: SEED_OX+310, y: SEED_OY+400 },
+  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+580, y: SEED_OY+400 },
+  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+40 },
+  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+1450, y: SEED_OY+40 },
+  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+280 },
+  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], x: SEED_OX+1450, y: SEED_OY+280 },
+  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+540 },
+  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+1450, y: SEED_OY+540 },
 ];
 // Check for stored history
 const storedHistory = localStorage.getItem('vidas_secas_history');
@@ -1335,7 +1360,8 @@ if (storedHistory) {
   saveState(); // Create initial baseline history state
 }
 
-renderCanvas(); 
+renderCanvas();
+resetView();   // Center pan on the virtual canvas so connections have equal room in all directions
 renderForm(); 
 generateCode();
 </script>
