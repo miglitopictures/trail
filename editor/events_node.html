@@ -383,36 +383,47 @@ function renderCanvas() {
 function drawConnections() {
   const svg = document.getElementById('svg-layer');
   svg.innerHTML = '';
-  
-  // Render established connections links pathways curves
+  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+
   events.forEach((ev, i) => {
     if (!ev.options) return;
     ev.options.forEach((opt, optIdx) => {
-      if (opt.nextId !== -1 && events[opt.nextId]) {
-        const target = events[opt.nextId];
-        
-        // Dynamically compute layout metrics mapping coordinates schemas directly
-        const startX = ev.x + 250; 
-        const startY = ev.y + 64 + (optIdx * 31) + 15; 
-        const endX = target.x;
-        const endY = target.y + 23;
-        
-        const cp1X = startX + 70;
-        const cp1Y = startY;
-        const cp2X = endX - 70;
-        const cp2Y = endY;
+      if (opt.nextId === -1 || !events[opt.nextId]) return;
 
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`);
-        
-        const isSelectedChain = (i === selectedIdx || opt.nextId === selectedIdx);
-        path.setAttribute('stroke', isSelectedChain ? '#007aff' : 'rgba(255,255,255,0.15)');
-        path.setAttribute('stroke-width', isSelectedChain ? '2.5' : '1.5');
-        path.setAttribute('fill', 'none');
-        svg.appendChild(path);
-      }
+      // Find the actual handle element in the DOM
+      const nodeEl = document.querySelector(`[data-idx="${i}"]`);
+      const handles = nodeEl?.querySelectorAll('.node-output-handle');
+      const handle = handles?.[optIdx];
+      
+      // Find target node's input anchor
+      const targetEl = document.querySelector(`[data-idx="${opt.nextId}"]`);
+      const anchor = targetEl?.querySelector('.node-input-anchor');
+
+      if (!handle || !anchor) return;
+
+      const hRect = handle.getBoundingClientRect();
+      const aRect = anchor.getBoundingClientRect();
+
+      // Convert to canvas-local coordinates
+      const startX = hRect.left + hRect.width / 2 - canvasRect.left;
+      const startY = hRect.top  + hRect.height / 2 - canvasRect.top;
+      const endX   = aRect.left + aRect.width  / 2 - canvasRect.left;
+      const endY   = aRect.top  + aRect.height / 2 - canvasRect.top;
+
+      const cp1X = startX + 70, cp1Y = startY;
+      const cp2X = endX   - 70, cp2Y = endY;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`);
+      const isSelected = (i === selectedIdx || opt.nextId === selectedIdx);
+      path.setAttribute('stroke', isSelected ? '#007aff' : 'rgba(255,255,255,0.15)');
+      path.setAttribute('stroke-width', isSelected ? '2.5' : '1.5');
+      path.setAttribute('fill', 'none');
+      svg.appendChild(path);
     });
   });
+
+  // keep the drag preview noodle unchanged...
 
   // Render temporary dynamic line path currently tracking mouse drag movements operations definitions
   if (activeLinkDrag) {
