@@ -33,30 +33,13 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 52px 1fr;
-    grid-template-columns: 260px 1fr 340px; /* Dynamic via JS */
+    grid-template-columns: 260px 1fr 340px;
     grid-template-areas:
       "header header header"
       "sidebar editor output";
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
-
-  /* ── RESIZER HACKS ── */
-  .resizer {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 100;
-    user-select: none;
-    transition: background 0.15s;
-  }
-  .resizer:hover, .resizer.dragging {
-    background: rgba(0, 122, 255, 0.25);
-  }
-  .resizer-right { right: -3px; }
-  .resizer-left { left: -3px; }
 
   /* ── HEADER ── */
   header {
@@ -91,7 +74,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    position: relative; /* Context for resizer */
   }
   .sidebar-top {
     padding: 12px;
@@ -301,7 +283,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    position: relative; /* Context for resizer */
   }
   .output-tabs {
     display: flex;
@@ -452,6 +433,95 @@
     margin: 0 auto 0 19px;
   }
 
+  /* parents section */
+  .chain-parents-section {
+    margin-bottom: 6px;
+  }
+  .chain-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chain-section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .chain-parent-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chain-parent-card:hover { border-color: rgba(0,122,255,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .chain-parent-card.is-detour { border-color: rgba(255,149,0,0.3); background: rgba(255,149,0,0.04); }
+  .chain-parent-info { flex: 1; min-width: 0; }
+  .chain-parent-top { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+  .chain-parent-via {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chain-parent-via em {
+    font-style: normal;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .chain-arrow-down {
+    width: 1px;
+    height: 16px;
+    background: var(--border-md);
+    margin: 0 0 6px 19px;
+    position: relative;
+  }
+  .chain-arrow-down::after {
+    content: '▾';
+    position: absolute;
+    bottom: -8px;
+    left: -4px;
+    font-size: 9px;
+    color: var(--muted);
+    line-height: 1;
+  }
+  .chain-current-marker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin: 6px 0;
+  }
+  .chain-current-marker::before, .chain-current-marker::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(0,122,255,0.2);
+  }
+  .chain-no-parents {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 6px 2px 10px;
+    font-style: italic;
+  }
+
   /* ── BUTTONS ── */
   .btn {
     padding: 7px 14px;
@@ -511,7 +581,6 @@
 </header>
 
 <div id="sidebar">
-  <div class="resizer resizer-right" id="resizer-left"></div>
   <div class="sidebar-top">
     <button class="btn btn-primary btn-sm btn-full" onclick="newEvent()">+ New Event</button>
   </div>
@@ -559,12 +628,12 @@
 </div>
 
 <div id="output">
-  <div class="resizer resizer-left" id="resizer-right"></div>
   <div class="output-tabs">
     <button class="tab-btn active" id="tab-code-btn" onclick="switchTab('code')">C Code</button>
     <button class="tab-btn" id="tab-chain-btn" onclick="switchTab('chain')">Chain View</button>
   </div>
 
+  <!-- Code tab -->
   <div class="tab-panel active" id="tab-code">
     <div class="code-toolbar">
       <span>Generated C</span>
@@ -573,6 +642,7 @@
     <pre id="code-output">// No events yet.</pre>
   </div>
 
+  <!-- Chain tab -->
   <div class="tab-panel" id="tab-chain">
     <div id="chain-view">
       <div class="chain-empty">
@@ -601,6 +671,22 @@ function switchTab(tab) {
 }
 
 // ── CHAIN VIEW ──
+
+// Find all events that point TO targetIdx, with the option label used
+function getParents(targetIdx) {
+  const parents = [];
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach(opt => {
+      if (opt.nextId === targetIdx) {
+        parents.push({ idx: i, ev, via: opt.message });
+      }
+    });
+  });
+  return parents;
+}
+
+// Build downward tree from startIdx
 function getChain(startIdx, visited = new Set()) {
   if (startIdx === -1 || startIdx === undefined || visited.has(startIdx) || startIdx >= events.length) return null;
   visited.add(startIdx);
@@ -612,6 +698,23 @@ function getChain(startIdx, visited = new Set()) {
     }
   }
   return node;
+}
+
+function renderMiniCard(idx, ev, extraClass = '') {
+  const isDetour = ev.type === 'EVENT_DETOUR';
+  const define = ev.define ? `<span class="chain-define">${escHtml(ev.define)}</span>` : '';
+  const pill = isDetour
+    ? '<span class="chain-type-pill det">DETOUR</span>'
+    : '<span class="chain-type-pill msg">MSG</span>';
+  return `
+    <div class="chain-card ${isDetour ? 'is-detour' : ''} ${extraClass}" onclick="selectEvent(${idx})">
+      <div class="chain-card-header">
+        <span class="chain-idx">[${idx}]</span>
+        ${define}
+        ${pill}
+      </div>
+      <div class="chain-msg">${escHtml(ev.message.substring(0, 60))}${ev.message.length > 60 ? '…' : ''}</div>
+    </div>`;
 }
 
 function renderChainNode(node, depth = 0) {
@@ -662,12 +765,51 @@ function renderChain() {
     view.innerHTML = '<div class="chain-empty"><div class="icon">🔗</div><div>Select an event to see its chain</div></div>';
     return;
   }
-  const tree = getChain(selectedIdx);
-  if (!tree) {
-    view.innerHTML = '<div class="chain-empty"><div class="icon">🔗</div><div>No chain data</div></div>';
-    return;
+
+  const parents = getParents(selectedIdx);
+  const downTree = getChain(selectedIdx);
+
+  let html = '';
+
+  // ── PARENTS SECTION ──
+  html += '<div class="chain-parents-section">';
+  html += '<div class="chain-section-label">Referenced by</div>';
+  if (parents.length === 0) {
+    html += '<div class="chain-no-parents">No events point here — this is a root event.</div>';
+  } else {
+    for (const p of parents) {
+      const isDetour = p.ev.type === 'EVENT_DETOUR';
+      const define = p.ev.define ? `<span class="chain-define">${escHtml(p.ev.define)}</span>` : '';
+      const pill = isDetour
+        ? '<span class="chain-type-pill det">DETOUR</span>'
+        : '<span class="chain-type-pill msg">MSG</span>';
+      html += `
+        <div class="chain-parent-card ${isDetour ? 'is-detour' : ''}" onclick="selectEvent(${p.idx})">
+          <div class="chain-parent-info">
+            <div class="chain-parent-top">
+              <span class="chain-idx">[${p.idx}]</span>
+              ${define}
+              ${pill}
+            </div>
+            <div class="chain-msg">${escHtml(p.ev.message.substring(0, 55))}${p.ev.message.length > 55 ? '…' : ''}</div>
+            <div class="chain-parent-via">via option: <em>"${escHtml(p.via)}"</em></div>
+          </div>
+        </div>`;
+    }
   }
-  view.innerHTML = renderChainNode(tree);
+  html += '</div>';
+
+  // ── CURRENT ──
+  html += '<div class="chain-arrow-down"></div>';
+  html += '<div class="chain-current-marker">current</div>';
+
+  // ── CHILDREN ──
+  html += '<div class="chain-section-label" style="margin-top:8px">Leads to</div>';
+  if (downTree) {
+    html += renderChainNode(downTree);
+  }
+
+  view.innerHTML = html;
 }
 
 // ── SIDEBAR ──
@@ -787,47 +929,6 @@ function setType(type) {
   document.getElementById('btn-msg').className = 'type-btn' + (type === 'EVENT_MESSAGE' ? ' active-msg' : '');
   document.getElementById('btn-det').className = 'type-btn' + (type === 'EVENT_DETOUR' ? ' active-det' : '');
   renderList(); generateCode();
-}
-
-// ── RESIZABLE LOGIC ──
-let sidebarWidth = 260;
-let outputWidth = 340;
-
-const resizerLeft = document.getElementById('resizer-left');
-const resizerRight = document.getElementById('resizer-right');
-
-resizerLeft.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  resizerLeft.classList.add('dragging');
-  document.addEventListener('mousemove', resizeLeftSidebar);
-  document.addEventListener('mouseup', () => {
-    resizerLeft.classList.remove('dragging');
-    document.removeEventListener('mousemove', resizeLeftSidebar);
-  });
-});
-
-resizerRight.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  resizerRight.classList.add('dragging');
-  document.addEventListener('mousemove', resizeRightSidebar);
-  document.addEventListener('mouseup', () => {
-    resizerRight.classList.remove('dragging');
-    document.removeEventListener('mousemove', resizeRightSidebar);
-  });
-});
-
-function resizeLeftSidebar(e) {
-  sidebarWidth = Math.max(160, Math.min(500, e.clientX));
-  updateLayout();
-}
-
-function resizeRightSidebar(e) {
-  outputWidth = Math.max(200, Math.min(800, window.innerWidth - e.clientX));
-  updateLayout();
-}
-
-function updateLayout() {
-  document.body.style.gridTemplateColumns = `${sidebarWidth}px 1fr ${outputWidth}px`;
 }
 
 function addOption() {
