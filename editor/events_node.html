@@ -236,11 +236,12 @@
     user-select: none;
   }
   .group-label-text {
-    flex: 1;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+    flex-grow: 1;      /* Allows the text to take up available space */
+    margin-right: 8px; /* Adds a little breathing room before the ungroup button */
+    }
   .group-ungroup-btn {
     font-size: 10px;
     opacity: 0.5;
@@ -250,6 +251,29 @@
     transition: opacity 0.1s, background 0.1s;
   }
   .group-ungroup-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+
+  /* Minimize Button */
+    .group-min-btn {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    flex-shrink: 0;
+    }
+    .group-min-btn:hover {
+    background: rgba(255, 255, 255, 0.6);
+    transform: scale(1.1);
+    }
+    .group-min-btn.minimized {
+    background: var(--accent);
+    }
+
+    /* Hidden state for nodes inside minimized groups */
+    .node.minimized-hidden {
+    display: none !important;
+    }
 
   /* ── MARQUEE SELECTION RECT ── */
   #marquee {
@@ -494,6 +518,13 @@ function renderGroups() {
   groups.forEach(g => {
     if (g.nodeIndices.length === 0) return;
     const bounds = getGroupBounds(g);
+
+    // Override height if minimized
+    if (g.isMinimized) {
+      bounds.h = 32;  // Keep just the header height
+      bounds.w = 250; // Set to exactly ONE node's width
+    }
+
     const col = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
     const isSelected = selectedGroupId === g.id;
 
@@ -510,6 +541,16 @@ function renderGroups() {
     label.className = 'group-label';
     label.style.background = col.label;
     label.style.color = col.text;
+
+    // 1. Create the minimize button
+    const minBtn = document.createElement('div');
+    minBtn.className = 'group-min-btn' + (g.isMinimized ? ' minimized' : '');
+    minBtn.title = g.isMinimized ? "Unminimize Group" : "Minimize Group";
+    minBtn.onmousedown = (e) => {
+      e.stopPropagation(); // Prevent group dragging
+      g.isMinimized = !g.isMinimized;
+      renderCanvas(); // Redraw to hide/show nodes
+    };
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'group-label-text';
@@ -529,6 +570,7 @@ function renderGroups() {
     ungroupBtn.title = 'Remove group';
     ungroupBtn.onmousedown = (e) => { e.stopPropagation(); deleteGroup(g.id); };
 
+    label.appendChild(minBtn);
     label.appendChild(nameSpan);
     label.appendChild(ungroupBtn);
     frame.appendChild(label);
@@ -587,12 +629,28 @@ function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
 
+  // 1. Calculate which nodes should be hidden
+  const hiddenNodes = new Set();
+  groups.forEach(g => {
+    if (g.isMinimized) {
+      g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
+    }
+  });
+
   events.forEach((ev, i) => {
     const cfg = getTypeConfig(ev.type);
     const div = document.createElement('div');
     const isActive = i === selectedIdx;
     const isMulti = selectedIndices.has(i);
-    div.className = 'node' + (isActive ? ' active' : '') + (isMulti && !isActive ? ' multi-selected' : '');
+
+    // 2. Apply the minimized-hidden class if the node is in a minimized group
+    let classes = 'node';
+    if (isActive) classes += ' active';
+    if (isMulti && !isActive) classes += ' multi-selected';
+    if (hiddenNodes.has(i)) classes += ' minimized-hidden';
+
+
+    div.className = classes;
     div.style.left = `${ev.x}px`;
     div.style.top = `${ev.y}px`;
     div.setAttribute('data-idx', i);
@@ -732,10 +790,20 @@ function drawConnections() {
   const nodesLayer = document.getElementById('nodes-layer');
   nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
 
+  // 1. Get hidden nodes
+  const hiddenNodes = new Set();
+  groups.forEach(g => {
+    if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
+  });
+
   events.forEach((ev, i) => {
     if (!ev.options) return;
     ev.options.forEach((opt, optIdx) => {
       if (opt.nextId === -1 || !events[opt.nextId]) return;
+
+      if (hiddenNodes.has(i) || hiddenNodes.has(opt.nextId)) return;
+
+
       const nodeEl = document.querySelector(`.node[data-idx="${i}"]`);
       const handles = nodeEl?.querySelectorAll('.node-output-handle');
       const handle = handles?.[optIdx];
@@ -1028,8 +1096,20 @@ window.onmousemove = (e) => {
     // Highlight nodes inside the marquee (in canvas space)
     const mx1 = (x - panX), my1 = (y - panY);
     const mx2 = mx1 + w, my2 = my1 + h;
+
+
+   // Check for hidden nodes
+    const hiddenNodes = new Set();
+    groups.forEach(g => {
+      if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
+    });
+    
+    
     selectedIndices.clear();
     events.forEach((ev, i) => {
+
+      if (hiddenNodes.has(i)) return;
+
       const nx = ev.x, ny = ev.y, nw = 250, nh = 100;
       if (nx + nw > mx1 && nx < mx2 && ny + nh > my1 && ny < my2) {
         selectedIndices.add(i);
