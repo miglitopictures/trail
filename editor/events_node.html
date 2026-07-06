@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vidas Secas — Node Event Editor</title>
+<style>
+  :root {
+    --bg:        #1e1e24;
+    --surface:   #25252e;
+    --panel:     #2d2d38;
+    --border:    rgba(255,255,255,0.08);
+    --border-md: rgba(255,255,255,0.16);
+    --accent:    #007aff;
+    --danger:    #ff453a;
+    --orange:    #ff9f0a;
+    --green:     #30d158;
+    --text:      #ffffff;
+    --secondary: #ebebf5;
+    --muted:     #8e8e93;
+    --fill:      rgba(255,255,255,0.08);
+    --fill-md:   rgba(255,255,255,0.16);
+    --sans:      -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --mono:      'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    grid-template-columns: 1fr 450px;
+    grid-template-areas:
+      "header header"
+      "canvas editor";
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── HEADER ── */
+  header {
+    grid-area: header;
+    background: rgba(37,37,46,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    z-index: 10;
+  }
+  header h1 { font-size: 17px; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+  header .subtitle { color: var(--muted); font-size: 13px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* ── INFINITE CANVAS ── */
+  #canvas-container {
+    grid-area: canvas;
+    position: relative;
+    overflow: hidden;
+    background-color: #16161a;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
+    background-size: 24px 24px;
+    cursor: grab;
+    user-select: none;
+  }
+  #canvas-container:active { cursor: grabbing; }
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform-origin: 0 0;
+  }
+  #svg-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 10000px; height: 10000px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── TWINE-STYLE NODES ── */
+  .node {
+    position: absolute;
+    width: 220px;
+    background: var(--surface);
+    border: 2px solid var(--border-md);
+    border-radius: 12px;
+    padding: 12px;
+    cursor: move;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 2;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .node:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.4); border-color: var(--muted); }
+  .node.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,122,255,0.4), 0 4px 12px rgba(0,0,0,0.3); }
+  
+  .node-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; pointer-events: none; }
+  .node-idx { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); }
+  .node-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .node-body { font-size: 12px; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none; }
+  
+  /* ── RIGHT PANEL (EDITOR / OUTPUT) ── */
+  #right-panel {
+    grid-area: editor;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+  }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px; background: var(--panel); }
+  .tab-btn { padding: 14px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  
+  .panel-content { overflow-y: auto; padding: 20px; display: none; height: 100%; }
+  .panel-content.active { display: block; }
+
+  /* ── EDITOR FORMS ── */
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px; }
+  .empty-state .big { font-size: 40px; }
+  .field-group { margin-bottom: 20px; }
+  .field-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+  
+  input[type="text"], textarea, select {
+    width: 100%; background: var(--panel); border: 1px solid var(--border-md); color: var(--text);
+    font-family: var(--sans); font-size: 14px; padding: 9px 12px; border-radius: 8px; outline: none;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  .type-selector { display: flex; gap: 6px; flex-wrap: wrap; }
+  .type-btn { flex: 1; min-width: 80px; padding: 8px; background: var(--panel); border: 1px solid var(--border-md); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 6px; }
+  .type-btn.active-type { font-weight: 600; }
+
+  .option-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .option-header { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .option-num { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .rm-option { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .rm-option:hover { color: var(--danger); }
+
+  /* ── CODE GENERATION OUTPUT ── */
+  pre { flex: 1; overflow: auto; padding: 14px; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #a3ebd0; background: #14241c; border-radius: 8px; white-space: pre; }
+
+  /* ── UI BUTTONS ── */
+  .btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border-md); font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; background: var(--panel); color: var(--text); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-danger { color: var(--danger); border-color: rgba(255,69,58,0.2); background: transparent; }
+  .btn-danger:hover { background: rgba(255,69,58,0.1); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  
+  .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 5; }
+  .copied-toast { position: fixed; bottom: 24px; right: 474px; background: rgba(0,0,0,0.8); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
+  .copied-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vidas Secas</h1>
+  <span class="subtitle">Node Canvas Editor</span>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="importJSON()">Import</button>
+    <button class="btn btn-sm" onclick="exportJSON()">Export</button>
+    <button class="btn btn-primary btn-sm" onclick="copyCode()">Copy Code</button>
+  </div>
+</header>
+
+<div id="canvas-container" onmousedown="onCanvasMouseDown(event)">
+  <div id="canvas">
+    <svg id="svg-layer"></svg>
+    <div id="nodes-layer"></div>
+  </div>
+  <div class="canvas-actions">
+    <button class="btn btn-primary" onclick="newEvent()">+ Create Node</button>
+    <button class="btn" onclick="resetView()">Center View</button>
+  </div>
+</div>
+
+<div id="right-panel">
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-edit-btn" onclick="switchTab('edit')">Properties</button>
+    <button class="tab-btn" id="tab-code-btn" onclick="switchTab('code')">C Code Output</button>
+  </div>
+
+  <div class="panel-content active" id="panel-edit">
+    <div class="empty-state" id="empty-state">
+      <div class="big">🖱️</div>
+      <div>Click a canvas node to edit properties</div>
+    </div>
+    <div id="event-form" style="display:none">
+      <div class="field-group">
+        <div class="field-label">Define Identifier</div>
+        <input type="text" id="f-define" placeholder="e.g. EMPTY_HOUSE" oninput="onFieldChange()">
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Message Text (<span id="char-count">0</span>/255)</div>
+        <textarea id="f-message" maxlength="255" oninput="onFieldChange()"></textarea>
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Type Behaviour</div>
+        <div class="type-selector" id="type-selector-container"></div>
+      </div>
+
+      <div class="field-group">
+        <div class="field-label">Branch Routing Options</div>
+        <div id="options-container"></div>
+        <button class="btn btn-sm" id="add-option-btn" onclick="addOption()">+ Add Option Branch</button>
+      </div>
+
+      <button class="btn btn-danger btn-sm" onclick="deleteEvent()">Delete Selected Node</button>
+    </div>
+  </div>
+
+  <div class="panel-content" id="panel-code">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <span style="font-size: 12px; color: var(--muted)">Generated Setup Data Structure</span>
+      <button class="btn btn-sm" onclick="copyCode()">Copy Code</button>
+    </div>
+    <pre id="code-output">// Create nodes to generate engine initialization block.</pre>
+  </div>
+</div>
+
+<div class="copied-toast" id="toast">Copied C setup arrays code to clipboard</div>
+
+<script>
+// Central Config Data Engine Logic
+const EVENT_TYPES = {
+  'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.4)' },
+  'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.4)' },
+  'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.4)' },
+  'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.4)' }
+};
+
+let events = [];
+let selectedIdx = null;
+let currentTab = 'edit';
+
+// Canvas States
+let panX = 50, panY = 50;
+let isPanning = false, startPanX = 0, startPanY = 0;
+let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
+
+function getTypeConfig(type) {
+  return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
+}
+
+// ── TWINE CANVAS VIEW RENDERING ──
+function renderCanvas() {
+  const container = document.getElementById('nodes-layer');
+  container.innerHTML = '';
+  
+  events.forEach((ev, i) => {
+    const cfg = getTypeConfig(ev.type);
+    const div = document.createElement('div');
+    div.className = 'node' + (i === selectedIdx ? ' active' : '');
+    div.style.left = `${ev.x}px`;
+    div.style.top = `${ev.y}px`;
+    
+    div.innerHTML = `
+      <div class="node-header">
+        <span class="node-idx">[${i}]</span>
+        <span class="node-title">${ev.define || '(No Name)'}</span>
+        <span class="node-badge" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>
+      </div>
+      <div class="node-body">${escHtml(ev.message || '(Empty message text...)')}</div>
+    `;
+    
+    // Register event handling for standard movement nodes mechanics
+    div.onmousedown = (e) => onNodeMouseDown(e, i);
+    container.appendChild(div);
+  });
+
+  updateCanvasTransform();
+  drawConnections();
+}
+
+function drawConnections() {
+  const svg = document.getElementById('svg-layer');
+  svg.innerHTML = '';
+  
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach(opt => {
+      if (opt.nextId !== -1 && events[opt.nextId]) {
+        const target = events[opt.nextId];
+        
+        // Generate connection line markers between structural vectors
+        const startX = ev.x + 220;
+        const startY = ev.y + 45;
+        const endX = target.x;
+        const endY = target.y + 25;
+        
+        const cp1X = startX + 60;
+        const cp1Y = startY;
+        const cp2X = endX - 60;
+        const cp2Y = endY;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`);
+        path.setAttribute('stroke', i === selectedIdx ? '#007aff' : 'rgba(255,255,255,0.15)');
+        path.setAttribute('stroke-width', i === selectedIdx ? '3' : '1.5');
+        path.setAttribute('fill', 'none');
+        svg.appendChild(path);
+      }
+    });
+  });
+}
+
+function updateCanvasTransform() {
+  document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
+}
+
+// Canvas & Drag Controls Input Matrix
+function onCanvasMouseDown(e) {
+  if (e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas') {
+    isPanning = true;
+    startPanX = e.clientX - panX;
+    startPanY = e.clientY - panY;
+  }
+}
+
+function onNodeMouseDown(e, idx) {
+  e.stopPropagation();
+  selectEvent(idx);
+  draggingNodeIdx = idx;
+  dragOffsetX = e.clientX - events[idx].x;
+  dragOffsetY = e.clientY - events[idx].y;
+}
+
+window.onmousemove = (e) => {
+  if (isPanning) {
+    panX = e.clientX - startPanX;
+    panY = e.clientY - startPanY;
+    updateCanvasTransform();
+  } else if (draggingNodeIdx !== null) {
+    events[draggingNodeIdx].x = e.clientX - dragOffsetX;
+    events[draggingNodeIdx].y = e.clientY - dragOffsetY;
+    
+    // Update node interface layer position cleanly on frames rendering loop optimization
+    renderCanvas();
+  }
+};
+
+window.onmouseup = () => {
+  isPanning = false;
+  draggingNodeIdx = null;
+};
+
+function resetView() {
+  panX = 50; panY = 50;
+  updateCanvasTransform();
+}
+
+// ── EDITOR CONTROLS & MUTATIONS MATRIX ──
+function selectEvent(idx) {
+  selectedIdx = idx;
+  renderCanvas();
+  renderForm();
+  generateCode();
+}
+
+function renderForm() {
+  if (selectedIdx === null) {
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('event-form').style.display = 'none';
+    return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('event-form').style.display = 'block';
+  
+  const ev = events[selectedIdx];
+  document.getElementById('f-define').value = ev.define || '';
+  document.getElementById('f-message').value = ev.message || '';
+  document.getElementById('char-count').textContent = (ev.message || '').length;
+  
+  renderTypeSelector(ev.type);
+  renderOptions();
+}
+
+function renderTypeSelector(activeType) {
+  const container = document.getElementById('type-selector-container');
+  container.innerHTML = '';
+  Object.keys(EVENT_TYPES).forEach(key => {
+    const typeDef = EVENT_TYPES[key];
+    const btn = document.createElement('button');
+    btn.className = 'type-btn';
+    btn.textContent = typeDef.label;
+    if (key === activeType) {
+      btn.className += ' active-type';
+      btn.style.background = typeDef.bg;
+      btn.style.borderColor = typeDef.border;
+      btn.style.color = typeDef.fg;
+    }
+    btn.onclick = () => { events[selectedIdx].type = key; renderCanvas(); renderTypeSelector(key); generateCode(); };
+    container.appendChild(btn);
+  });
+}
+
+function renderOptions() {
+  const container = document.getElementById('options-container');
+  container.innerHTML = '';
+  const ev = events[selectedIdx];
+  
+  ev.options.forEach((opt, i) => {
+    const card = document.createElement('div');
+    card.className = 'option-card';
+    card.innerHTML = `
+      <div class="option-header">
+        <span class="option-num">${i + 1}</span>
+        <input type="text" value="${escHtml(opt.message)}" placeholder="Option text branch string" oninput="updateOption(${i}, 'message', this.value)">
+        <button class="rm-option" onclick="removeOption(${i})">✕</button>
+      </div>
+      <select onchange="updateOption(${i}, 'nextId', parseInt(this.value))">
+        <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node (Close Interface)</option>
+        ${events.map((targetEv, targetIdx) => {
+          if (targetIdx === selectedIdx) return '';
+          const label = targetEv.define ? `[${targetIdx}] ${targetEv.define}` : `[${targetIdx}] ${targetEv.message.substring(0, 24)}`;
+          return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
+        }).join('')}
+      </select>
+    `;
+    container.appendChild(card);
+  });
+  document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
+}
+
+function updateOption(optIdx, field, value) {
+  events[selectedIdx].options[optIdx][field] = value;
+  renderCanvas();
+  generateCode();
+}
+
+function addOption() {
+  events[selectedIdx].options.push({ message: 'Branch Choice Pathway', nextId: -1 });
+  renderOptions();
+  renderCanvas();
+  generateCode();
+}
+
+function removeOption(optIdx) {
+  events[selectedIdx].options.splice(optIdx, 1);
+  renderOptions();
+  renderCanvas();
+  generateCode();
+}
+
+function onFieldChange() {
+  const ev = events[selectedIdx];
+  ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
+  ev.message = document.getElementById('f-message').value;
+  document.getElementById('char-count').textContent = ev.message.length;
+  renderCanvas();
+  generateCode();
+}
+
+function newEvent() {
+  const defaultType = Object.keys(EVENT_TYPES)[0] || 'EVENT_MESSAGE';
+  // Generates positions distributed across dynamic tracking space coordinates offsets.
+  const x = -panX + 150 + (events.length * 20 % 200);
+  const y = -panY + 100 + (events.length * 40 % 300);
+  
+  events.push({ define: '', message: 'New visual node story event.', type: defaultType, options: [], x, y });
+  selectEvent(events.length - 1);
+}
+
+function deleteEvent() {
+  if (selectedIdx === null || !confirm(`Delete visual node entry element [${selectedIdx}]?`)) return;
+  
+  // Cascade clean dangling dynamic target links inside options array tracking references maps
+  events.forEach(ev => {
+    ev.options.forEach(opt => {
+      if (opt.nextId === selectedIdx) opt.nextId = -1;
+      else if (opt.nextId > selectedIdx) opt.nextId--;
+    });
+  });
+
+  events.splice(selectedIdx, 1);
+  selectedIdx = events.length > 0 ? 0 : null;
+  renderCanvas();
+  renderForm();
+  generateCode();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-edit-btn').className = 'tab-btn' + (tab === 'edit' ? ' active' : '');
+  document.getElementById('tab-code-btn').className = 'tab-btn' + (tab === 'code' ? ' active' : '');
+  document.getElementById('panel-edit').className = 'panel-content' + (tab === 'edit' ? ' active' : '');
+  document.getElementById('panel-code').className = 'panel-content' + (tab === 'code' ? ' active' : '');
+}
+
+// ── C CODE GENERATION ENGINE ──
+function generateCode() {
+  if (events.length === 0) {
+    document.getElementById('code-output').textContent = '// No dynamic engine node structures generated yet.';
+    return;
+  }
+  const lines = [];
+  const defs = events.map((ev, i) => ev.define ? [ev.define, i] : null).filter(Boolean);
+  if (defs.length > 0) {
+    lines.push('// ── Event index defines ──────────────────────────');
+    defs.forEach(([name, idx]) => lines.push(`#define ${name.padEnd(24)} ${idx}`));
+    lines.push('');
+  }
+  lines.push(`// ── Event setup (put in main or init) ────────────`);
+  lines.push(`Event events[${events.length}] = {0};`);
+  lines.push('');
+  events.forEach((ev, i) => {
+    const comment = ev.define ? `/* ${ev.define} */` : `/* [${i}] */`;
+    lines.push(`events[${i}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
+    ev.options.forEach(opt => lines.push(`addOption(&events[${i}], "${escapeCStr(opt.message)}", ${opt.nextId});`));
+    if (ev.options.length > 0) lines.push('');
+  });
+  document.getElementById('code-output').textContent = lines.join('\n');
+}
+
+// ── DATA IMPORT / EXPORT PERSISTENCE UTILS ──
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vs_canvas_events.json';
+  a.click();
+}
+
+function importJSON() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        events = data.map((item, index) => ({
+          ...item,
+          x: item.x !== undefined ? item.x : 100 + (index * 240) % 800,
+          y: item.y !== undefined ? item.y : 100 + Math.floor(index / 3) * 180
+        }));
+        selectedIdx = events.length > 0 ? 0 : null;
+        renderCanvas(); renderForm(); generateCode();
+      } catch(err) { alert('Error Parsing Node Matrix Configuration Architecture: ' + err.message); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function copyCode() {
+  const code = document.getElementById('code-output').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  });
+}
+
+function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// Bootstrap Spatial Array Seeds Configuration
+const seed = [
+  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 50 },
+  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 220 },
+  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 390 },
+  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 5 }, { message: 'Go Away', nextId: -1 }], x: 320, y: 50 },
+  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 6 }, { message: 'Go Away', nextId: -1 }], x: 320, y: 240 },
+  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: 600, y: 50 },
+  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: -1 }, { message: 'Não responder', nextId: -1 }], x: 600, y: 240 }
+];
+events = seed.map(e => ({ ...e, options: e.options.map(o => ({ ...o })) }));
+renderCanvas();
+generateCode();
+</script>
+</body>
+</html>

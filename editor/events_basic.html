@@ -33,7 +33,7 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 52px 1fr;
-    grid-template-columns: 260px 1fr 340px;
+    grid-template-columns: 260px 1fr 600px;
     grid-template-areas:
       "header header header"
       "sidebar editor output";
@@ -129,14 +129,6 @@
     border-radius: 4px;
     letter-spacing: 0.02em;
   }
-  .event-item .type-badge.detour {
-    background: rgba(255,149,0,0.12);
-    color: var(--orange);
-  }
-  .event-item .type-badge.message {
-    background: rgba(52,199,89,0.12);
-    color: var(--green);
-  }
   .event-item .del-btn {
     background: none;
     border: none;
@@ -217,9 +209,10 @@
   .define-hint code { font-family: var(--mono); background: var(--fill); padding: 1px 4px; border-radius: 4px; }
 
   /* type selector */
-  .type-selector { display: flex; gap: 8px; }
+  .type-selector { display: flex; flex-wrap: wrap; gap: 8px; }
   .type-btn {
     flex: 1;
+    min-width: 100px;
     padding: 9px 8px;
     background: var(--surface);
     border: 1px solid var(--border-md);
@@ -232,8 +225,7 @@
     transition: all 0.15s;
   }
   .type-btn:hover { background: var(--fill); color: var(--text); }
-  .type-btn.active-msg { background: rgba(52,199,89,0.1); border-color: rgba(52,199,89,0.4); color: #248a3d; font-weight: 600; }
-  .type-btn.active-det { background: rgba(255,149,0,0.1); border-color: rgba(255,149,0,0.4); color: #c67c00; font-weight: 600; }
+  .type-btn.active-type { font-weight: 600; }
 
   /* section title */
   .section-title {
@@ -363,7 +355,6 @@
   }
   .chain-card:hover { border-color: rgba(0,122,255,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
   .chain-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.12); }
-  .chain-card.is-detour { border-color: rgba(255,149,0,0.35); background: rgba(255,149,0,0.04); }
   .chain-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .chain-idx { font-size: 10px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
   .chain-define { font-size: 10px; font-weight: 600; color: var(--accent); font-family: var(--mono); }
@@ -374,8 +365,6 @@
     border-radius: 4px;
     margin-left: auto;
   }
-  .chain-type-pill.msg { background: rgba(52,199,89,0.12); color: #248a3d; }
-  .chain-type-pill.det { background: rgba(255,149,0,0.12); color: #c67c00; }
   .chain-msg { font-size: 12px; color: var(--secondary); line-height: 1.4; }
 
   /* connector lines + option branches */
@@ -467,7 +456,6 @@
     gap: 10px;
   }
   .chain-parent-card:hover { border-color: rgba(0,122,255,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  .chain-parent-card.is-detour { border-color: rgba(255,149,0,0.3); background: rgba(255,149,0,0.04); }
   .chain-parent-info { flex: 1; min-width: 0; }
   .chain-parent-top { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
   .chain-parent-via {
@@ -609,10 +597,7 @@
 
     <div class="field-group">
       <div class="field-label">Event Type</div>
-      <div class="type-selector">
-        <button class="type-btn" id="btn-msg" onclick="setType('EVENT_MESSAGE')">Message</button>
-        <button class="type-btn" id="btn-det" onclick="setType('EVENT_DETOUR')">Detour</button>
-      </div>
+      <div class="type-selector" id="type-selector-container"></div>
     </div>
 
     <div class="field-group">
@@ -633,7 +618,6 @@
     <button class="tab-btn" id="tab-chain-btn" onclick="switchTab('chain')">Chain View</button>
   </div>
 
-  <!-- Code tab -->
   <div class="tab-panel active" id="tab-code">
     <div class="code-toolbar">
       <span>Generated C</span>
@@ -642,7 +626,6 @@
     <pre id="code-output">// No events yet.</pre>
   </div>
 
-  <!-- Chain tab -->
   <div class="tab-panel" id="tab-chain">
     <div id="chain-view">
       <div class="chain-empty">
@@ -656,9 +639,24 @@
 <div class="copied-toast" id="toast">Copied to clipboard</div>
 
 <script>
+// ── CENTRALIZED EVENT TYPES CONFIGURATION ──
+// Simply add/modify elements here to add new behaviors to the system.
+const EVENT_TYPES = {
+  'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(52,199,89,0.12)', fg: '#248a3d', border: 'rgba(52,199,89,0.4)', cardBg: 'var(--panel)' },
+  'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,149,0,0.12)', fg: '#c67c00', border: 'rgba(255,149,0,0.4)', cardBg: 'rgba(255,149,0,0.04)' },
+  // Examples of how easy it is to grow your system:
+  'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,59,48,0.12)',  fg: '#d32f2f', border: 'rgba(255,59,48,0.4)',  cardBg: 'rgba(255,59,48,0.04)' },
+  'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.12)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.4)',  cardBg: 'rgba(94,92,230,0.04)' }
+};
+
 let events = [];
 let selectedIdx = null;
 let activeTab = 'code';
+
+// Helper to safely get color/layout configs for elements dynamically
+function getTypeConfig(type) {
+  return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)', cardBg: 'var(--panel)' };
+}
 
 // ── TAB SWITCHING ──
 function switchTab(tab) {
@@ -671,8 +669,6 @@ function switchTab(tab) {
 }
 
 // ── CHAIN VIEW ──
-
-// Find all events that point TO targetIdx, with the option label used
 function getParents(targetIdx) {
   const parents = [];
   events.forEach((ev, i) => {
@@ -686,7 +682,6 @@ function getParents(targetIdx) {
   return parents;
 }
 
-// Build downward tree from startIdx
 function getChain(startIdx, visited = new Set()) {
   if (startIdx === -1 || startIdx === undefined || visited.has(startIdx) || startIdx >= events.length) return null;
   visited.add(startIdx);
@@ -700,36 +695,17 @@ function getChain(startIdx, visited = new Set()) {
   return node;
 }
 
-function renderMiniCard(idx, ev, extraClass = '') {
-  const isDetour = ev.type === 'EVENT_DETOUR';
-  const define = ev.define ? `<span class="chain-define">${escHtml(ev.define)}</span>` : '';
-  const pill = isDetour
-    ? '<span class="chain-type-pill det">DETOUR</span>'
-    : '<span class="chain-type-pill msg">MSG</span>';
-  return `
-    <div class="chain-card ${isDetour ? 'is-detour' : ''} ${extraClass}" onclick="selectEvent(${idx})">
-      <div class="chain-card-header">
-        <span class="chain-idx">[${idx}]</span>
-        ${define}
-        ${pill}
-      </div>
-      <div class="chain-msg">${escHtml(ev.message.substring(0, 60))}${ev.message.length > 60 ? '…' : ''}</div>
-    </div>`;
-}
-
 function renderChainNode(node, depth = 0) {
   if (!node) return '';
   const ev = node.ev;
   const isSelected = node.idx === selectedIdx;
-  const isDetour = ev.type === 'EVENT_DETOUR';
+  const cfg = getTypeConfig(ev.type);
   const define = ev.define ? `<span class="chain-define">${escHtml(ev.define)}</span>` : '';
-  const pill = isDetour
-    ? '<span class="chain-type-pill det">DETOUR</span>'
-    : '<span class="chain-type-pill msg">MSG</span>';
+  const pill = `<span class="chain-type-pill" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>`;
 
   let html = `
     <div class="chain-node">
-      <div class="chain-card ${isSelected ? 'is-selected' : ''} ${isDetour ? 'is-detour' : ''}"
+      <div class="chain-card ${isSelected ? 'is-selected' : ''}" style="background: ${cfg.cardBg}; ${isSelected ? '' : 'border-color:' + cfg.border}"
            onclick="selectEvent(${node.idx})">
         <div class="chain-card-header">
           <span class="chain-idx">[${node.idx}]</span>
@@ -778,13 +754,11 @@ function renderChain() {
     html += '<div class="chain-no-parents">No events point here — this is a root event.</div>';
   } else {
     for (const p of parents) {
-      const isDetour = p.ev.type === 'EVENT_DETOUR';
+      const cfg = getTypeConfig(p.ev.type);
       const define = p.ev.define ? `<span class="chain-define">${escHtml(p.ev.define)}</span>` : '';
-      const pill = isDetour
-        ? '<span class="chain-type-pill det">DETOUR</span>'
-        : '<span class="chain-type-pill msg">MSG</span>';
+      const pill = `<span class="chain-type-pill" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>`;
       html += `
-        <div class="chain-parent-card ${isDetour ? 'is-detour' : ''}" onclick="selectEvent(${p.idx})">
+        <div class="chain-parent-card" style="background: ${cfg.cardBg}; border-color: ${cfg.border}" onclick="selectEvent(${p.idx})">
           <div class="chain-parent-info">
             <div class="chain-parent-top">
               <span class="chain-idx">[${p.idx}]</span>
@@ -817,12 +791,13 @@ function renderList() {
   const list = document.getElementById('event-list');
   list.innerHTML = '';
   events.forEach((ev, i) => {
+    const cfg = getTypeConfig(ev.type);
     const item = document.createElement('div');
     item.className = 'event-item' + (i === selectedIdx ? ' active' : '');
     item.innerHTML = `
       <span class="idx">${i}</span>
       <span class="name">${ev.define || ev.message || '(empty)'}</span>
-      <span class="type-badge ${ev.type === 'EVENT_DETOUR' ? 'detour' : 'message'}">${ev.type === 'EVENT_DETOUR' ? 'DET' : 'MSG'}</span>
+      <span class="type-badge" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>
       <button class="del-btn" onclick="deleteAt(event, ${i})">×</button>
     `;
     item.addEventListener('click', () => selectEvent(i));
@@ -851,9 +826,31 @@ function renderForm() {
   document.getElementById('f-define').value = ev.define;
   document.getElementById('f-message').value = ev.message;
   document.getElementById('char-count').textContent = ev.message.length;
-  document.getElementById('btn-msg').className = 'type-btn' + (ev.type === 'EVENT_MESSAGE' ? ' active-msg' : '');
-  document.getElementById('btn-det').className = 'type-btn' + (ev.type === 'EVENT_DETOUR' ? ' active-det' : '');
+  
+  renderTypeSelector(ev.type);
   renderOptions();
+}
+
+function renderTypeSelector(activeType) {
+  const container = document.getElementById('type-selector-container');
+  container.innerHTML = '';
+  
+  Object.keys(EVENT_TYPES).forEach(typeKey => {
+    const typeDef = EVENT_TYPES[typeKey];
+    const btn = document.createElement('button');
+    btn.className = 'type-btn';
+    btn.textContent = typeDef.label;
+    
+    if (typeKey === activeType) {
+      btn.className += ' active-type';
+      btn.style.background = typeDef.bg;
+      btn.style.borderColor = typeDef.border;
+      btn.style.color = typeDef.fg;
+    }
+    
+    btn.onclick = () => setType(typeKey);
+    container.appendChild(btn);
+  });
 }
 
 function renderOptions() {
@@ -895,7 +892,9 @@ function buildNextIdSelect(optIdx, currentNextId) {
 
 // ── MUTATIONS ──
 function newEvent() {
-  events.push({ define: '', message: 'New event', type: 'EVENT_MESSAGE', options: [] });
+  // Uses the first valid configured type as standard default layout
+  const defaultType = Object.keys(EVENT_TYPES)[0] || 'EVENT_MESSAGE';
+  events.push({ define: '', message: 'New event', type: defaultType, options: [] });
   selectEvent(events.length - 1);
 }
 
@@ -926,9 +925,9 @@ function onFieldChange() {
 function setType(type) {
   if (selectedIdx === null) return;
   events[selectedIdx].type = type;
-  document.getElementById('btn-msg').className = 'type-btn' + (type === 'EVENT_MESSAGE' ? ' active-msg' : '');
-  document.getElementById('btn-det').className = 'type-btn' + (type === 'EVENT_DETOUR' ? ' active-det' : '');
+  renderTypeSelector(type);
   renderList(); generateCode();
+  if (activeTab === 'chain') renderChain();
 }
 
 function addOption() {
@@ -1030,7 +1029,7 @@ const seed = [
   { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [] },
   { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [] },
   { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [] },
-  { define: '', message: 'Andaram em círculos...', type: 'EVENT_DETOUR', options: [] },
+  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [] },
   { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE',
     options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }] },
   { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [] },
