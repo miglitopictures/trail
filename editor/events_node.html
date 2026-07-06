@@ -2,23 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Vidas Secas — Node Event Editor</title>
+<title>Vidas Secas — Node Canvas Editor</title>
 <style>
   :root {
-    --bg:        #1e1e24;
-    --surface:   #25252e;
-    --panel:     #2d2d38;
+    --bg:        #16161a;
+    --surface:   #1e1e24;
+    --panel:     #25252e;
     --border:    rgba(255,255,255,0.08);
     --border-md: rgba(255,255,255,0.16);
     --accent:    #007aff;
+    --accent-dim: rgba(0,122,255,0.15);
     --danger:    #ff453a;
     --orange:    #ff9f0a;
     --green:     #30d158;
     --text:      #ffffff;
     --secondary: #ebebf5;
     --muted:     #8e8e93;
-    --fill:      rgba(255,255,255,0.08);
-    --fill-md:   rgba(255,255,255,0.16);
+    --fill:      rgba(255,255,255,0.06);
+    --fill-md:   rgba(255,255,255,0.12);
     --sans:      -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
     --mono:      'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
   }
@@ -33,7 +34,7 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 52px 1fr;
-    grid-template-columns: 1fr 450px;
+    grid-template-columns: 1fr 420px;
     grid-template-areas:
       "header header"
       "canvas editor";
@@ -44,14 +45,14 @@
   /* ── HEADER ── */
   header {
     grid-area: header;
-    background: rgba(37,37,46,0.85);
+    background: rgba(30,30,36,0.85);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     padding: 0 20px;
     gap: 16px;
-    z-index: 10;
+    z-index: 100;
   }
   header h1 { font-size: 17px; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
   header .subtitle { color: var(--muted); font-size: 13px; }
@@ -62,9 +63,9 @@
     grid-area: canvas;
     position: relative;
     overflow: hidden;
-    background-color: #16161a;
-    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
-    background-size: 24px 24px;
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1.5px, transparent 0);
+    background-size: 28px 28px;
     cursor: grab;
     user-select: none;
   }
@@ -78,34 +79,74 @@
   #svg-layer {
     position: absolute;
     top: 0; left: 0;
-    width: 10000px; height: 10000px;
+    width: 20000px; height: 20000px;
     pointer-events: none;
     z-index: 1;
   }
 
-  /* ── TWINE-STYLE NODES ── */
+  /* ── NODES ── */
   .node {
     position: absolute;
-    width: 220px;
+    width: 250px;
     background: var(--surface);
-    border: 2px solid var(--border-md);
+    border: 1px solid var(--border-md);
     border-radius: 12px;
-    padding: 12px;
-    cursor: move;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
     z-index: 2;
+    cursor: move;
+    display: flex;
+    flex-direction: column;
     transition: box-shadow 0.15s, border-color 0.15s;
   }
-  .node:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.4); border-color: var(--muted); }
-  .node.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,122,255,0.4), 0 4px 12px rgba(0,0,0,0.3); }
+  .node:hover { border-color: var(--muted); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .node.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.3), 0 8px 24px rgba(0,0,0,0.5); z-index: 10; }
   
-  .node-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; pointer-events: none; }
+  .node-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
   .node-idx { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); }
-  .node-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
-  .node-body { font-size: 12px; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none; }
+  .node-title { flex: 1; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--secondary); font-family: var(--mono); }
+  .node-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
+  .node-body { padding: 12px; font-size: 12px; color: var(--secondary); line-height: 1.45; min-height: 48px; word-break: break-word; }
   
-  /* ── RIGHT PANEL (EDITOR / OUTPUT) ── */
+  /* Node Input Target Anchor */
+  .node-input-anchor {
+    position: absolute;
+    left: -7px;
+    top: 16px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2a2a35;
+    border: 2.5px solid var(--muted);
+    z-index: 5;
+    cursor: pointer;
+    transition: background 0.1s, transform 0.1s;
+  }
+  .node.active .node-input-anchor { border-color: var(--accent); }
+  .node-input-anchor.drag-over { background: var(--green); border-color: #fff; transform: scale(1.25); }
+
+  /* Node Options Handle Rows */
+  .node-options { border-top: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(0,0,0,0.1); border-radius: 0 0 12px 12px; overflow: hidden; }
+  .node-opt-row { position: relative; padding: 8px 28px 8px 12px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .node-opt-row:last-child { border-bottom: none; }
+  .node-opt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  
+  .node-output-handle {
+    position: absolute;
+    right: -6px;
+    top: calc(50% - 6px);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--muted);
+    cursor: crosshair;
+    z-index: 5;
+    transition: transform 0.1s, background 0.1s;
+  }
+  .node-output-handle:hover { transform: scale(1.3); background: var(--accent); border-color: #fff; }
+  .node-output-handle.connected { border-color: var(--accent); background: var(--accent); }
+
+  /* ── RIGHT EDITOR SIDE-PANEL ── */
   #right-panel {
     grid-area: editor;
     background: var(--surface);
@@ -113,6 +154,7 @@
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
+    z-index: 50;
   }
   .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px; background: var(--panel); }
   .tab-btn { padding: 14px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; }
@@ -121,41 +163,39 @@
   .panel-content { overflow-y: auto; padding: 20px; display: none; height: 100%; }
   .panel-content.active { display: block; }
 
-  /* ── EDITOR FORMS ── */
-  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px; }
-  .empty-state .big { font-size: 40px; }
-  .field-group { margin-bottom: 20px; }
+  /* Forms Elements */
+  .field-group { margin-bottom: 18px; }
   .field-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
   
   input[type="text"], textarea, select {
     width: 100%; background: var(--panel); border: 1px solid var(--border-md); color: var(--text);
-    font-family: var(--sans); font-size: 14px; padding: 9px 12px; border-radius: 8px; outline: none;
+    font-family: var(--sans); font-size: 13.5px; padding: 9px 12px; border-radius: 8px; outline: none;
   }
   input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); }
-  textarea { resize: vertical; min-height: 80px; }
+  textarea { resize: vertical; min-height: 70px; }
 
   .type-selector { display: flex; gap: 6px; flex-wrap: wrap; }
-  .type-btn { flex: 1; min-width: 80px; padding: 8px; background: var(--panel); border: 1px solid var(--border-md); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 6px; }
+  .type-btn { flex: 1; min-width: 85px; padding: 8px; background: var(--panel); border: 1px solid var(--border-md); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 6px; }
   .type-btn.active-type { font-weight: 600; }
 
-  .option-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-  .option-header { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .option-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; position: relative; }
+  .option-card-header { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
   .option-num { font-size: 11px; color: var(--muted); font-weight: 600; }
-  .rm-option { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .rm-option { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; margin-left: auto; }
   .rm-option:hover { color: var(--danger); }
 
-  /* ── CODE GENERATION OUTPUT ── */
-  pre { flex: 1; overflow: auto; padding: 14px; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #a3ebd0; background: #14241c; border-radius: 8px; white-space: pre; }
+  /* Code Output Frame Styling */
+  pre { flex: 1; overflow: auto; padding: 14px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: #a2ebb9; background: #13241a; border-radius: 8px; white-space: pre; }
 
-  /* ── UI BUTTONS ── */
+  /* Action Triggers Elements */
   .btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border-md); font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; background: var(--panel); color: var(--text); }
   .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn-danger { color: var(--danger); border-color: rgba(255,69,58,0.2); background: transparent; }
   .btn-danger:hover { background: rgba(255,69,58,0.1); }
-  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
   
-  .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 5; }
-  .copied-toast { position: fixed; bottom: 24px; right: 474px; background: rgba(0,0,0,0.8); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
+  .canvas-actions { position: absolute; bottom: 16px; left: 16px; display: flex; gap: 8px; z-index: 50; }
+  .copied-toast { position: fixed; bottom: 24px; right: 444px; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 1000; }
   .copied-toast.show { opacity: 1; }
 </style>
 </head>
@@ -163,11 +203,11 @@
 
 <header>
   <h1>Vidas Secas</h1>
-  <span class="subtitle">Node Canvas Editor</span>
+  <span class="subtitle">Interactive Canvas Workflow</span>
   <div class="header-actions">
-    <button class="btn btn-sm" onclick="importJSON()">Import</button>
-    <button class="btn btn-sm" onclick="exportJSON()">Export</button>
-    <button class="btn btn-primary btn-sm" onclick="copyCode()">Copy Code</button>
+    <button class="btn btn-sm" onclick="importJSON()">Import JSON</button>
+    <button class="btn btn-sm" onclick="exportJSON()">Export JSON</button>
+    <button class="btn btn-primary btn-sm" onclick="copyCode()">Copy C Code</button>
   </div>
 </header>
 
@@ -177,82 +217,84 @@
     <div id="nodes-layer"></div>
   </div>
   <div class="canvas-actions">
-    <button class="btn btn-primary" onclick="newEvent()">+ Create Node</button>
+    <button class="btn btn-primary" onclick="newEvent()">+ Add Story Node</button>
     <button class="btn" onclick="resetView()">Center View</button>
   </div>
 </div>
 
 <div id="right-panel">
   <div class="tabs">
-    <button class="tab-btn active" id="tab-edit-btn" onclick="switchTab('edit')">Properties</button>
-    <button class="tab-btn" id="tab-code-btn" onclick="switchTab('code')">C Code Output</button>
+    <button class="tab-btn active" id="tab-edit-btn" onclick="switchTab('edit')">Properties Panel</button>
+    <button class="tab-btn" id="tab-code-btn" onclick="switchTab('code')">Generated Arrays</button>
   </div>
 
   <div class="panel-content active" id="panel-edit">
-    <div class="empty-state" id="empty-state">
-      <div class="big">🖱️</div>
-      <div>Click a canvas node to edit properties</div>
+    <div class="empty-state" id="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px;">
+      <div style="font-size: 36px;">🖱️</div>
+      <div>Click any card node on the canvas layout workspace grid to adjust configuration settings values</div>
     </div>
     <div id="event-form" style="display:none">
       <div class="field-group">
-        <div class="field-label">Define Identifier</div>
+        <div class="field-label">C Macro #define Name</div>
         <input type="text" id="f-define" placeholder="e.g. EMPTY_HOUSE" oninput="onFieldChange()">
       </div>
 
       <div class="field-group">
-        <div class="field-label">Message Text (<span id="char-count">0</span>/255)</div>
+        <div class="field-label">Message Payload String (<span id="char-count">0</span>/255)</div>
         <textarea id="f-message" maxlength="255" oninput="onFieldChange()"></textarea>
       </div>
 
       <div class="field-group">
-        <div class="field-label">Type Behaviour</div>
+        <div class="field-label">Structural State Type</div>
         <div class="type-selector" id="type-selector-container"></div>
       </div>
 
       <div class="field-group">
-        <div class="field-label">Branch Routing Options</div>
+        <div class="field-label">Options Layout Config Matrix</div>
         <div id="options-container"></div>
-        <button class="btn btn-sm" id="add-option-btn" onclick="addOption()">+ Add Option Branch</button>
+        <button class="btn btn-sm" id="add-option-btn" onclick="addOption()" style="margin-top: 4px;">+ Insert Option Branch Pathway</button>
       </div>
 
-      <button class="btn btn-danger btn-sm" onclick="deleteEvent()">Delete Selected Node</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteEvent()" style="margin-top: 10px; width: 100%;">Delete Selected Node Frame</button>
     </div>
   </div>
 
   <div class="panel-content" id="panel-code">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-      <span style="font-size: 12px; color: var(--muted)">Generated Setup Data Structure</span>
-      <button class="btn btn-sm" onclick="copyCode()">Copy Code</button>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <span style="font-size: 12px; color: var(--muted)">C Initializer Sequence Struct Implementation</span>
+      <button class="btn btn-sm" onclick="copyCode()">Copy Data Blocks</button>
     </div>
-    <pre id="code-output">// Create nodes to generate engine initialization block.</pre>
+    <pre id="code-output">// Interactive node structure code outputs</pre>
   </div>
 </div>
 
-<div class="copied-toast" id="toast">Copied C setup arrays code to clipboard</div>
+<div class="copied-toast" id="toast">C Setup Logic arrays compiled and captured successfully!</div>
 
 <script>
-// Central Config Data Engine Logic
 const EVENT_TYPES = {
-  'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.4)' },
-  'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.4)' },
-  'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.4)' },
-  'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.4)' }
+  'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.35)' },
+  'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.35)' },
+  'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.35)' },
+  'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
 };
 
 let events = [];
 let selectedIdx = null;
-let currentTab = 'edit';
 
-// Canvas States
-let panX = 50, panY = 50;
+// Infinite Grid Canvas Core Offsets Matrices variables tracking mechanisms
+let panX = 40, panY = 40;
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
+
+// Drag and drop linking runtime vectors trackers
+let activeLinkDrag = null; // { fromNodeIdx, optionIdx, startX, startY, currentX, currentY }
+let targetHoverNodeIdx = null;
 
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
 }
 
-// ── TWINE CANVAS VIEW RENDERING ──
+// ── RENDER CONTROLLER PIPELINE MECHANISMS ──
 function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
@@ -263,17 +305,73 @@ function renderCanvas() {
     div.className = 'node' + (i === selectedIdx ? ' active' : '');
     div.style.left = `${ev.x}px`;
     div.style.top = `${ev.y}px`;
+    div.setAttribute('data-idx', i);
     
-    div.innerHTML = `
-      <div class="node-header">
-        <span class="node-idx">[${i}]</span>
-        <span class="node-title">${ev.define || '(No Name)'}</span>
-        <span class="node-badge" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>
-      </div>
-      <div class="node-body">${escHtml(ev.message || '(Empty message text...)')}</div>
+    // Node input anchoring receiver point targeting mechanism
+    const inputAnchor = document.createElement('div');
+    inputAnchor.className = 'node-input-anchor';
+    if (targetHoverNodeIdx === i) inputAnchor.className += ' drag-over';
+    
+    // Header
+    const nHead = document.createElement('div');
+    nHead.className = 'node-header';
+    nHead.innerHTML = `
+      <span class="node-idx">[${i}]</span>
+      <span class="node-title">${ev.define || '(no define)'}</span>
+      <span class="node-badge" style="background:${cfg.bg}; color:${cfg.fg}">${cfg.short}</span>
     `;
     
-    // Register event handling for standard movement nodes mechanics
+    // Body Text Element string parser handler container boundaries 
+    const nBody = document.createElement('div');
+    nBody.className = 'node-body';
+    nBody.textContent = ev.message || '(Empty Text String)';
+    
+    div.appendChild(inputAnchor);
+    div.appendChild(nHead);
+    div.appendChild(nBody);
+
+    // Options Branch Rendering Rows Stack with Connection Handles
+    if (ev.options && ev.options.length > 0) {
+      const optsCont = document.createElement('div');
+      optsCont.className = 'node-options';
+      
+      ev.options.forEach((opt, optIdx) => {
+        const optRow = document.createElement('div');
+        optRow.className = 'node-opt-row';
+        
+        const optTxt = document.createElement('span');
+        optTxt.className = 'node-opt-text';
+        optTxt.textContent = `${optIdx + 1}. ${opt.message || 'Option'}`;
+        
+        const nextLbl = document.createElement('span');
+        nextLbl.style.fontSize = '9px';
+        nextLbl.style.padding = '2px 4px';
+        nextLbl.style.borderRadius = '3px';
+        
+        if (opt.nextId === -1) {
+          nextLbl.textContent = 'TERM';
+          nextLbl.style.background = 'rgba(255,255,255,0.05)';
+          nextLbl.style.color = 'var(--muted)';
+        } else {
+          nextLbl.textContent = `→ [${opt.nextId}]`;
+          nextLbl.style.background = 'var(--accent-dim)';
+          nextLbl.style.color = '#7fc0ff';
+        }
+
+        const outHandle = document.createElement('div');
+        outHandle.className = 'node-output-handle' + (opt.nextId !== -1 ? ' connected' : '');
+        
+        // Wire mousedown execution hookups directly onto output points components
+        outHandle.onmousedown = (e) => onHandleMouseDown(e, i, optIdx);
+
+        optRow.appendChild(optTxt);
+        optRow.appendChild(nextLbl);
+        optRow.appendChild(outHandle);
+        optsCont.appendChild(optRow);
+      });
+      div.appendChild(optsCont);
+    }
+    
     div.onmousedown = (e) => onNodeMouseDown(e, i);
     container.appendChild(div);
   });
@@ -286,39 +384,58 @@ function drawConnections() {
   const svg = document.getElementById('svg-layer');
   svg.innerHTML = '';
   
+  // Render established connections links pathways curves
   events.forEach((ev, i) => {
     if (!ev.options) return;
-    ev.options.forEach(opt => {
+    ev.options.forEach((opt, optIdx) => {
       if (opt.nextId !== -1 && events[opt.nextId]) {
         const target = events[opt.nextId];
         
-        // Generate connection line markers between structural vectors
-        const startX = ev.x + 220;
-        const startY = ev.y + 45;
+        // Dynamically compute layout metrics mapping coordinates schemas directly
+        const startX = ev.x + 250; 
+        const startY = ev.y + 64 + (optIdx * 31) + 15; 
         const endX = target.x;
-        const endY = target.y + 25;
+        const endY = target.y + 23;
         
-        const cp1X = startX + 60;
+        const cp1X = startX + 70;
         const cp1Y = startY;
-        const cp2X = endX - 60;
+        const cp2X = endX - 70;
         const cp2Y = endY;
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`);
-        path.setAttribute('stroke', i === selectedIdx ? '#007aff' : 'rgba(255,255,255,0.15)');
-        path.setAttribute('stroke-width', i === selectedIdx ? '3' : '1.5');
+        
+        const isSelectedChain = (i === selectedIdx || opt.nextId === selectedIdx);
+        path.setAttribute('stroke', isSelectedChain ? '#007aff' : 'rgba(255,255,255,0.15)');
+        path.setAttribute('stroke-width', isSelectedChain ? '2.5' : '1.5');
         path.setAttribute('fill', 'none');
         svg.appendChild(path);
       }
     });
   });
+
+  // Render temporary dynamic line path currently tracking mouse drag movements operations definitions
+  if (activeLinkDrag) {
+    const cp1X = activeLinkDrag.startX + 70;
+    const cp1Y = activeLinkDrag.startY;
+    const cp2X = activeLinkDrag.currentX - 70;
+    const cp2Y = activeLinkDrag.currentY;
+
+    const dragPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    dragPath.setAttribute('d', `M ${activeLinkDrag.startX} ${activeLinkDrag.startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${activeLinkDrag.currentX} ${activeLinkDrag.currentY}`);
+    dragPath.setAttribute('stroke', '#30d158');
+    dragPath.setAttribute('stroke-width', '2');
+    dragPath.setAttribute('stroke-dasharray', '4 3');
+    dragPath.setAttribute('fill', 'none');
+    svg.appendChild(dragPath);
+  }
 }
 
 function updateCanvasTransform() {
   document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
 }
 
-// Canvas & Drag Controls Input Matrix
+// ── EVENTS HOOKUPS AND INTERACTIVE CONTROLS MATRIX ──
 function onCanvasMouseDown(e) {
   if (e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas') {
     isPanning = true;
@@ -328,11 +445,41 @@ function onCanvasMouseDown(e) {
 }
 
 function onNodeMouseDown(e, idx) {
+  if (e.target.classList.contains('node-output-handle')) return; 
   e.stopPropagation();
   selectEvent(idx);
   draggingNodeIdx = idx;
   dragOffsetX = e.clientX - events[idx].x;
   dragOffsetY = e.clientY - events[idx].y;
+}
+
+// ── REPLACED INTERACTION CONTROLS MATRIX FOR PERFECT NOODLE SNAPPING ──
+
+function onHandleMouseDown(e, nodeIdx, optionIdx) {
+  e.stopPropagation();
+  e.preventDefault();
+  
+  // 1. Get the canvas position to use as our local root tracking zero-point
+  const canvasEl = document.getElementById('canvas');
+  const canvasRect = canvasEl.getBoundingClientRect();
+  
+  // 2. Find EXACTLY where the clicked circular handle is relative to the canvas coordinate plane
+  const handleRect = e.target.getBoundingClientRect();
+  const sX = handleRect.left + (handleRect.width / 2) - canvasRect.left;
+  const sY = handleRect.top + (handleRect.height / 2) - canvasRect.top;
+
+  // 3. Transform client cursor bounds down into local infinite workspace space perfectly
+  const cX = e.clientX - canvasRect.left;
+  const cY = e.clientY - canvasRect.top;
+
+  activeLinkDrag = {
+    fromNodeIdx: nodeIdx,
+    optionIdx: optionIdx,
+    startX: sX,
+    startY: sY,
+    currentX: cX,
+    currentY: cY
+  };
 }
 
 window.onmousemove = (e) => {
@@ -343,8 +490,26 @@ window.onmousemove = (e) => {
   } else if (draggingNodeIdx !== null) {
     events[draggingNodeIdx].x = e.clientX - dragOffsetX;
     events[draggingNodeIdx].y = e.clientY - dragOffsetY;
+    renderCanvas();
+  } else if (activeLinkDrag) {
+    // FIX: Map mouse tracking bounds explicitly to the canvas rect to automatically remove header height anomalies
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+    activeLinkDrag.currentX = e.clientX - canvasRect.left;
+    activeLinkDrag.currentY = e.clientY - canvasRect.top;
     
-    // Update node interface layer position cleanly on frames rendering loop optimization
+    // Hit test detection processing against nodes layer components boundaries
+    targetHoverNodeIdx = null;
+    const elements = document.elementsFromPoint(e.clientX, e.clientY);
+    for (let el of elements) {
+      const nodeEl = el.closest('.node');
+      if (nodeEl) {
+        const idx = parseInt(nodeEl.getAttribute('data-idx'));
+        if (idx !== activeLinkDrag.fromNodeIdx) {
+          targetHoverNodeIdx = idx;
+          break;
+        }
+      }
+    }
     renderCanvas();
   }
 };
@@ -352,14 +517,29 @@ window.onmousemove = (e) => {
 window.onmouseup = () => {
   isPanning = false;
   draggingNodeIdx = null;
+  
+  if (activeLinkDrag) {
+    if (targetHoverNodeIdx !== null) {
+      // Connect option branch safely link to target indices reference map points updates definitions
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = targetHoverNodeIdx;
+    } else {
+      // Drop line into empty workspace grounds safely snaps link vector back into terminating layout parameters rules models
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = -1;
+    }
+    activeLinkDrag = null;
+    targetHoverNodeIdx = null;
+    renderCanvas();
+    renderForm();
+    generateCode();
+  }
 };
 
 function resetView() {
-  panX = 50; panY = 50;
+  panX = 40; panY = 40;
   updateCanvasTransform();
 }
 
-// ── EDITOR CONTROLS & MUTATIONS MATRIX ──
+// ── PROPERTIES PANEL UPDATE MANAGEMENT FUNCTIONS ──
 function selectEvent(idx) {
   selectedIdx = idx;
   renderCanvas();
@@ -413,19 +593,22 @@ function renderOptions() {
     const card = document.createElement('div');
     card.className = 'option-card';
     card.innerHTML = `
-      <div class="option-header">
+      <div class="option-card-header">
         <span class="option-num">${i + 1}</span>
-        <input type="text" value="${escHtml(opt.message)}" placeholder="Option text branch string" oninput="updateOption(${i}, 'message', this.value)">
+        <input type="text" value="${escHtml(opt.message)}" placeholder="Choice option string payload context" oninput="updateOption(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
       </div>
-      <select onchange="updateOption(${i}, 'nextId', parseInt(this.value))">
-        <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node (Close Interface)</option>
-        ${events.map((targetEv, targetIdx) => {
-          if (targetIdx === selectedIdx) return '';
-          const label = targetEv.define ? `[${targetIdx}] ${targetEv.define}` : `[${targetIdx}] ${targetEv.message.substring(0, 24)}`;
-          return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
-        }).join('')}
-      </select>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size:11.5px; color:var(--muted)">Target:</span>
+        <select onchange="updateOption(${i}, 'nextId', parseInt(this.value))" style="padding: 6px; font-size: 12.5px; flex: 1;">
+          <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node (Clear / Close UI)</option>
+          ${events.map((targetEv, targetIdx) => {
+            if (targetIdx === selectedIdx) return '';
+            const label = targetEv.define ? `[${targetIdx}] ${targetEv.define}` : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
+            return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
+          }).join('')}
+        </select>
+      </div>
     `;
     container.appendChild(card);
   });
@@ -439,7 +622,7 @@ function updateOption(optIdx, field, value) {
 }
 
 function addOption() {
-  events[selectedIdx].options.push({ message: 'Branch Choice Pathway', nextId: -1 });
+  events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
   renderOptions();
   renderCanvas();
   generateCode();
@@ -463,18 +646,16 @@ function onFieldChange() {
 
 function newEvent() {
   const defaultType = Object.keys(EVENT_TYPES)[0] || 'EVENT_MESSAGE';
-  // Generates positions distributed across dynamic tracking space coordinates offsets.
-  const x = -panX + 150 + (events.length * 20 % 200);
-  const y = -panY + 100 + (events.length * 40 % 300);
+  const x = -panX + 100 + (events.length * 25 % 200);
+  const y = -panY + 120 + (events.length * 45 % 300);
   
-  events.push({ define: '', message: 'New visual node story event.', type: defaultType, options: [], x, y });
+  events.push({ define: '', message: 'New visual node story data element.', type: defaultType, options: [], x, y });
   selectEvent(events.length - 1);
 }
 
 function deleteEvent() {
-  if (selectedIdx === null || !confirm(`Delete visual node entry element [${selectedIdx}]?`)) return;
+  if (selectedIdx === null || !confirm(`Permanently drop node array element frame index references [${selectedIdx}]?`)) return;
   
-  // Cascade clean dangling dynamic target links inside options array tracking references maps
   events.forEach(ev => {
     ev.options.forEach(opt => {
       if (opt.nextId === selectedIdx) opt.nextId = -1;
@@ -490,17 +671,16 @@ function deleteEvent() {
 }
 
 function switchTab(tab) {
-  currentTab = tab;
   document.getElementById('tab-edit-btn').className = 'tab-btn' + (tab === 'edit' ? ' active' : '');
   document.getElementById('tab-code-btn').className = 'tab-btn' + (tab === 'code' ? ' active' : '');
   document.getElementById('panel-edit').className = 'panel-content' + (tab === 'edit' ? ' active' : '');
   document.getElementById('panel-code').className = 'panel-content' + (tab === 'code' ? ' active' : '');
 }
 
-// ── C CODE GENERATION ENGINE ──
+// ── COMPILER GENERATOR FOR STRUCT ARRAYS ──
 function generateCode() {
   if (events.length === 0) {
-    document.getElementById('code-output').textContent = '// No dynamic engine node structures generated yet.';
+    document.getElementById('code-output').textContent = '// Empty canvas arrays metrics models profiles parameters.';
     return;
   }
   const lines = [];
@@ -522,12 +702,12 @@ function generateCode() {
   document.getElementById('code-output').textContent = lines.join('\n');
 }
 
-// ── DATA IMPORT / EXPORT PERSISTENCE UTILS ──
+// ── UTILITIES STORAGE IMPORT/EXPORT PERSISTENCE DATA MATRIX ──
 function exportJSON() {
   const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'vs_canvas_events.json';
+  a.download = 'vidas_secas_canvas_nodes.json';
   a.click();
 }
 
@@ -540,14 +720,14 @@ function importJSON() {
     reader.onload = ev => {
       try {
         const data = JSON.parse(ev.target.result);
-        events = data.map((item, index) => ({
+        events = data.map((item, idx) => ({
           ...item,
-          x: item.x !== undefined ? item.x : 100 + (index * 240) % 800,
-          y: item.y !== undefined ? item.y : 100 + Math.floor(index / 3) * 180
+          x: item.x !== undefined ? item.x : 60 + (idx * 280) % 1200,
+          y: item.y !== undefined ? item.y : 60 + Math.floor(idx / 4) * 220
         }));
         selectedIdx = events.length > 0 ? 0 : null;
         renderCanvas(); renderForm(); generateCode();
-      } catch(err) { alert('Error Parsing Node Matrix Configuration Architecture: ' + err.message); }
+      } catch(err) { alert('Parser execution error loading node workspace structures maps configs: ' + err.message); }
     };
     reader.readAsText(file);
   };
@@ -566,18 +746,30 @@ function copyCode() {
 function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
 function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// Bootstrap Spatial Array Seeds Configuration
+// ── YOUR COMPLETE ORIGINAL SEED DATA WITH GRACEFUL POSITIONING COORDINATES ──
 const seed = [
-  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 50 },
-  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 220 },
-  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: 50, y: 390 },
-  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 5 }, { message: 'Go Away', nextId: -1 }], x: 320, y: 50 },
-  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 6 }, { message: 'Go Away', nextId: -1 }], x: 320, y: 240 },
-  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: 600, y: 50 },
-  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: -1 }, { message: 'Não responder', nextId: -1 }], x: 600, y: 240 }
+  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: 40, y: 40 },
+  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: 310, y: 40 },
+  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: 580, y: 40 },
+  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], x: 850, y: 40 },
+  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], x: 40, y: 220 },
+  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], x: 310, y: 220 },
+  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], x: 580, y: 220 },
+  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], x: 850, y: 220 },
+  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], x: 40, y: 400 },
+  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], x: 310, y: 400 },
+  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], x: 580, y: 400 },
+  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], x: 1150, y: 40 },
+  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: 1450, y: 40 },
+  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], x: 1150, y: 280 },
+  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], x: 1450, y: 280 },
+  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: 1150, y: 540 },
+  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: 1450, y: 540 },
 ];
+
 events = seed.map(e => ({ ...e, options: e.options.map(o => ({ ...o })) }));
 renderCanvas();
+renderForm();
 generateCode();
 </script>
 </body>
