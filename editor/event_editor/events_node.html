@@ -26,9 +26,11 @@
   <div id="marquee"></div>
   <div class="canvas-actions">
     <button class="btn btn-primary" onclick="newEvent()">+ Add Story Node</button>
-    <button class="btn" onclick="resetView()">Center View</button>
-    <button class="btn btn-danger" onclick="resetHistory()" >Reset Board</button>
-    <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+click line for router</span>
+    <button class="btn" onclick="fitToScreen()">Fit to Screen</button>
+    <button class="btn" onclick="resetZoom()">100%</button>
+    <button class="btn btn-danger" onclick="resetHistory()">Reset Board</button>
+    <span id="zoom-badge" style="font-size:11px; color: var(--muted); min-width:36px; text-align:center;">100%</span>
+    <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+click line for router · scroll to zoom</span>
   </div>
 </div>
 
@@ -102,7 +104,9 @@ let selectedRouter = null;
 let selectedGroupId = null;
 
 const CANVAS_SIZE = 8000; // Virtual canvas dimensions — large enough to never clip connections
+const ZOOM_MIN = 0.1, ZOOM_MAX = 2, ZOOM_STEP = 0.12;
 let panX = 0, panY = 0;  // Will be set to center on init
+let zoom = 1;
 let isPanning = false, startPanX = 0, startPanY = 0;
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
@@ -124,7 +128,7 @@ let historyIndex = -1;
 
 function saveState() {
   // Deep clone the current state
-  const currentState = JSON.stringify({ events, groups, groupIdCounter });
+  const currentState = JSON.stringify({ events, groups, groupIdCounter, zoom, panX, panY });
   
   // Prevent duplicate consecutive states
   if (historyIndex >= 0 && historyStack[historyIndex] === currentState) return;
@@ -156,6 +160,8 @@ function undo() {
       events = parsed.events || [];
       groups = parsed.groups || [];
       groupIdCounter = parsed.groupIdCounter || 0;
+      zoom = parsed.zoom ?? zoom;
+      if (parsed.panX !== undefined) { panX = parsed.panX; panY = parsed.panY; }
 
       // Clear selections to prevent referencing deleted indices
       selectedIdx = null;
@@ -380,8 +386,8 @@ function renderGroups() {
       // Capture Node Offsets
       groupDragOffsets = g.nodeIndices.map(i => ({
         idx: i,
-        ox: e.clientX - events[i].x,
-        oy: e.clientY - events[i].y
+        ox: e.clientX / zoom - events[i].x,
+        oy: e.clientY / zoom - events[i].y
       }));
 
       // Capture Router Offsets
@@ -391,7 +397,7 @@ function renderGroups() {
           (opt.routers || []).forEach((router, routerIdx) => {
             groupRouterOffsets.push({
               nodeIdx: i, optIdx, routerIdx,
-              ox: e.clientX - router.x, oy: e.clientY - router.y
+              ox: e.clientX / zoom - router.x, oy: e.clientY / zoom - router.y
             });
           });
         });
@@ -584,9 +590,17 @@ function buildPathWithRouters(startX, startY, endX, endY, routers) {
 function drawConnections() {
   const svg = document.getElementById('svg-layer');
   svg.innerHTML = '';
-  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
   const nodesLayer = document.getElementById('nodes-layer');
   nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
+
+  // Helper: convert a screen-space point (from getBoundingClientRect) to canvas space
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+  function toCanvas(screenX, screenY) {
+    return {
+      x: (screenX - containerRect.left - panX) / zoom,
+      y: (screenY - containerRect.top  - panY) / zoom
+    };
+  }
 
   // 1. Get hidden nodes
   const hiddenNodes = new Set();
@@ -601,7 +615,6 @@ function drawConnections() {
 
       if (hiddenNodes.has(i) || hiddenNodes.has(opt.nextId)) return;
 
-
       const nodeEl = document.querySelector(`.node[data-idx="${i}"]`);
       const handles = nodeEl?.querySelectorAll('.node-output-handle');
       const handle = handles?.[optIdx];
@@ -611,10 +624,9 @@ function drawConnections() {
 
       const hRect = handle.getBoundingClientRect();
       const aRect = anchor.getBoundingClientRect();
-      const startX = hRect.left + hRect.width / 2 - canvasRect.left;
-      const startY = hRect.top  + hRect.height / 2 - canvasRect.top;
-      const endX   = aRect.left + aRect.width  / 2 - canvasRect.left;
-      const endY   = aRect.top  + aRect.height / 2 - canvasRect.top;
+      const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+      const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
+      const startX = start.x, startY = start.y, endX = end.x, endY = end.y;
 
       if (!opt.routers) opt.routers = [];
       const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
@@ -643,8 +655,8 @@ function drawConnections() {
         if (!e.ctrlKey && !e.metaKey) return;
         e.stopPropagation();
         e.preventDefault();
-        const clickX = e.clientX - canvasRect.left;
-        const clickY = e.clientY - canvasRect.top;
+        const click = toCanvas(e.clientX, e.clientY);
+        const clickX = click.x, clickY = click.y;
         if (!opt.routers) opt.routers = [];
         const newPt = { x: clickX, y: clickY };
         const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
@@ -695,8 +707,8 @@ function drawConnections() {
           selectEvent(null);
           draggingRouter = {
             nodeIdx: i, optionIdx: optIdx, routerIdx,
-            offsetX: e.clientX - router.x,
-            offsetY: e.clientY - router.y
+            offsetX: e.clientX / zoom - router.x,
+            offsetY: e.clientY / zoom - router.y
           };
           drawConnections();
         });
@@ -723,7 +735,7 @@ function drawConnections() {
 
 function updateCanvasTransform() {
   const canvas = document.getElementById('canvas');
-  canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
   // Ensure canvas and SVG layer always cover the full virtual area
   canvas.style.width  = `${CANVAS_SIZE}px`;
   canvas.style.height = `${CANVAS_SIZE}px`;
@@ -731,9 +743,35 @@ function updateCanvasTransform() {
   svg.style.width  = `${CANVAS_SIZE}px`;
   svg.style.height = `${CANVAS_SIZE}px`;
   svg.setAttribute('viewBox', `0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`);
+  // Update zoom level badge
+  const badge = document.getElementById('zoom-badge');
+  if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
 }
 
 // ── INPUT HANDLERS ──
+
+// ── ZOOM (mouse-wheel, pinch via wheel event with ctrlKey) ──
+document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+  e.preventDefault();
+
+  const container = document.getElementById('canvas-container');
+  const rect = container.getBoundingClientRect();
+
+  // Cursor position relative to the container
+  const cursorX = e.clientX - rect.left;
+  const cursorY = e.clientY - rect.top;
+
+  // Pinch gesture sends ctrlKey=true with fractional deltaY; trackpad scroll otherwise
+  const delta = e.ctrlKey ? -e.deltaY * 0.01 : -e.deltaY * 0.001;
+  const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta * ZOOM_STEP * (zoom / ZOOM_STEP)));
+
+  // Adjust pan so the point under the cursor stays fixed
+  panX = cursorX - (cursorX - panX) * (newZoom / zoom);
+  panY = cursorY - (cursorY - panY) * (newZoom / zoom);
+  zoom = newZoom;
+
+  updateCanvasTransform();
+}, { passive: false });
 
 function onCanvasMouseDown(e) {
   const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
@@ -794,8 +832,8 @@ function onNodeMouseDown(e, idx) {
     draggingMulti = true;
     multiDragOffsets = [...selectedIndices].map(i => ({
       idx: i,
-      ox: e.clientX - events[i].x,
-      oy: e.clientY - events[i].y
+      ox: e.clientX / zoom - events[i].x,
+      oy: e.clientY / zoom - events[i].y
     }));
     return;
   }
@@ -805,8 +843,8 @@ function onNodeMouseDown(e, idx) {
     draggingMulti = true;
     multiDragOffsets = [...selectedIndices].map(i => ({
       idx: i,
-      ox: e.clientX - events[i].x,
-      oy: e.clientY - events[i].y
+      ox: e.clientX / zoom - events[i].x,
+      oy: e.clientY / zoom - events[i].y
     }));
     return;
   }
@@ -815,8 +853,8 @@ function onNodeMouseDown(e, idx) {
   selectedIndices.clear();
   selectEvent(idx);
   draggingNodeIdx = idx;
-  dragOffsetX = e.clientX - events[idx].x;
-  dragOffsetY = e.clientY - events[idx].y;
+  dragOffsetX = e.clientX / zoom - events[idx].x;
+  dragOffsetY = e.clientY / zoom - events[idx].y;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -827,6 +865,44 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     undo();
     return;
+  }
+
+  // F — fit all nodes to screen
+  if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault();
+    fitToScreen();
+    return;
+  }
+
+  // Ctrl+= / Ctrl+- to zoom, Ctrl+0 to reset zoom to 100%
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === '=' || e.key === '+') {
+      e.preventDefault();
+      const container = document.getElementById('canvas-container');
+      const cx = container.clientWidth / 2, cy = container.clientHeight / 2;
+      const newZoom = Math.min(ZOOM_MAX, zoom + 0.1);
+      panX = cx - (cx - panX) * (newZoom / zoom);
+      panY = cy - (cy - panY) * (newZoom / zoom);
+      zoom = newZoom;
+      updateCanvasTransform();
+      return;
+    }
+    if (e.key === '-') {
+      e.preventDefault();
+      const container = document.getElementById('canvas-container');
+      const cx = container.clientWidth / 2, cy = container.clientHeight / 2;
+      const newZoom = Math.max(ZOOM_MIN, zoom - 0.1);
+      panX = cx - (cx - panX) * (newZoom / zoom);
+      panY = cy - (cy - panY) * (newZoom / zoom);
+      zoom = newZoom;
+      updateCanvasTransform();
+      return;
+    }
+    if (e.key === '0') {
+      e.preventDefault();
+      resetZoom();
+      return;
+    }
   }
 
   // Ctrl+G — group selected nodes
@@ -882,14 +958,15 @@ window.addEventListener('keydown', (e) => {
 
 function onHandleMouseDown(e, nodeIdx, optionIdx) {
   e.stopPropagation(); e.preventDefault();
-  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
   const handleRect = e.target.getBoundingClientRect();
+  const toCanvas = (sx, sy) => ({ x: (sx - containerRect.left - panX) / zoom, y: (sy - containerRect.top - panY) / zoom });
+  const start = toCanvas(handleRect.left + handleRect.width / 2, handleRect.top + handleRect.height / 2);
+  const cur   = toCanvas(e.clientX, e.clientY);
   activeLinkDrag = {
     fromNodeIdx: nodeIdx, optionIdx: optionIdx,
-    startX: handleRect.left + (handleRect.width / 2) - canvasRect.left,
-    startY: handleRect.top + (handleRect.height / 2) - canvasRect.top,
-    currentX: e.clientX - canvasRect.left,
-    currentY: e.clientY - canvasRect.top
+    startX: start.x, startY: start.y,
+    currentX: cur.x, currentY: cur.y
   };
 }
 
@@ -908,9 +985,9 @@ window.onmousemove = (e) => {
     marquee.style.width = `${w}px`;
     marquee.style.height = `${h}px`;
 
-    // Highlight nodes inside the marquee (in canvas space)
-    const mx1 = (x - panX), my1 = (y - panY);
-    const mx2 = mx1 + w, my2 = my1 + h;
+    // Highlight nodes inside the marquee (in canvas space, accounting for zoom)
+    const mx1 = (x - panX) / zoom, my1 = (y - panY) / zoom;
+    const mx2 = mx1 + w / zoom, my2 = my1 + h / zoom;
 
 
    // Check for hidden nodes
@@ -942,8 +1019,8 @@ window.onmousemove = (e) => {
     updateCanvasTransform();
   } else if (draggingGroupId !== null) {
     groupDragOffsets.forEach(({ idx, ox, oy }) => {
-      events[idx].x = e.clientX - ox;
-      events[idx].y = e.clientY - oy;
+      events[idx].x = e.clientX / zoom - ox;
+      events[idx].y = e.clientY / zoom - oy;
       const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
       if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
     });
@@ -952,8 +1029,8 @@ window.onmousemove = (e) => {
     groupRouterOffsets.forEach(({ nodeIdx, optIdx, routerIdx, ox, oy }) => {
       const r = events[nodeIdx].options[optIdx].routers[routerIdx];
       if (r) {
-        r.x = e.clientX - ox;
-        r.y = e.clientY - oy;
+        r.x = e.clientX / zoom - ox;
+        r.y = e.clientY / zoom - oy;
       }
     });
 
@@ -961,8 +1038,8 @@ window.onmousemove = (e) => {
     drawConnections();
   } else if (draggingMulti) {
     multiDragOffsets.forEach(({ idx, ox, oy }) => {
-      events[idx].x = e.clientX - ox;
-      events[idx].y = e.clientY - oy;
+      events[idx].x = e.clientX / zoom - ox;
+      events[idx].y = e.clientY / zoom - oy;
       const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
       if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
     });
@@ -972,23 +1049,23 @@ window.onmousemove = (e) => {
     const { nodeIdx, optionIdx, routerIdx, offsetX, offsetY } = draggingRouter;
     const opt = events[nodeIdx].options[optionIdx];
     if (opt && opt.routers && opt.routers[routerIdx]) {
-      opt.routers[routerIdx].x = e.clientX - offsetX;
-      opt.routers[routerIdx].y = e.clientY - offsetY;
+      opt.routers[routerIdx].x = e.clientX / zoom - offsetX;
+      opt.routers[routerIdx].y = e.clientY / zoom - offsetY;
       const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
       if (rdiv) { rdiv.style.left = `${opt.routers[routerIdx].x}px`; rdiv.style.top = `${opt.routers[routerIdx].y}px`; }
       drawConnections();
     }
   } else if (draggingNodeIdx !== null) {
-    events[draggingNodeIdx].x = e.clientX - dragOffsetX;
-    events[draggingNodeIdx].y = e.clientY - dragOffsetY;
+    events[draggingNodeIdx].x = e.clientX / zoom - dragOffsetX;
+    events[draggingNodeIdx].y = e.clientY / zoom - dragOffsetY;
     const nodeEl = document.querySelector(`.node[data-idx="${draggingNodeIdx}"]`);
     if (nodeEl) { nodeEl.style.left = `${events[draggingNodeIdx].x}px`; nodeEl.style.top = `${events[draggingNodeIdx].y}px`; }
     renderGroups();
     drawConnections();
   } else if (activeLinkDrag) {
-    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-    activeLinkDrag.currentX = e.clientX - canvasRect.left;
-    activeLinkDrag.currentY = e.clientY - canvasRect.top;
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    activeLinkDrag.currentX = (e.clientX - containerRect.left - panX) / zoom;
+    activeLinkDrag.currentY = (e.clientY - containerRect.top  - panY) / zoom;
     let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     for (let el of elements) {
@@ -1047,13 +1124,55 @@ window.onmouseup = (e) => {
   if (stateChanged) saveState();
 };
 
-function resetView() {
+function fitToScreen() {
+  if (events.length === 0) return;
+
+  // Find bounding box of all visible nodes
+  const hiddenNodes = new Set();
+  groups.forEach(g => { if (g.isMinimized) g.nodeIndices.forEach(i => hiddenNodes.add(i)); });
+
+  const NODE_W = 255, NODE_H = 180; // approximate node height
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  events.forEach((ev, i) => {
+    if (hiddenNodes.has(i)) return;
+    if (ev.x < minX) minX = ev.x;
+    if (ev.y < minY) minY = ev.y;
+    if (ev.x + NODE_W > maxX) maxX = ev.x + NODE_W;
+    if (ev.y + NODE_H > maxY) maxY = ev.y + NODE_H;
+  });
+
+  if (minX === Infinity) return; // all hidden
+
   const container = document.getElementById('canvas-container');
   const vw = container.clientWidth;
   const vh = container.clientHeight;
-  // Place the canvas origin so the virtual center lands at the viewport center
-  panX = vw / 2 - CANVAS_SIZE / 2;
-  panY = vh / 2 - CANVAS_SIZE / 2;
+  const PAD = 60;
+
+  const contentW = maxX - minX;
+  const contentH = maxY - minY;
+  const newZoom = Math.min(
+    ZOOM_MAX,
+    Math.max(ZOOM_MIN, Math.min((vw - PAD * 2) / contentW, (vh - PAD * 2) / contentH))
+  );
+
+  // Center the content in the viewport at the new zoom
+  const contentCenterX = (minX + maxX) / 2;
+  const contentCenterY = (minY + maxY) / 2;
+  panX = vw / 2 - contentCenterX * newZoom;
+  panY = vh / 2 - contentCenterY * newZoom;
+  zoom = newZoom;
+
+  updateCanvasTransform();
+}
+
+function resetZoom() {
+  const container = document.getElementById('canvas-container');
+  const cx = container.clientWidth  / 2;
+  const cy = container.clientHeight / 2;
+  // Zoom to 100% keeping viewport center fixed
+  panX = cx - (cx - panX) * (1 / zoom);
+  panY = cy - (cy - panY) * (1 / zoom);
+  zoom = 1;
   updateCanvasTransform();
 }
 
@@ -1147,10 +1266,10 @@ function onFieldChange() {
 }
 
 function newEvent() {
-  // Place new nodes near the current viewport center in canvas space
+  // Place new nodes near the current viewport center in canvas space (accounting for zoom)
   const container = document.getElementById('canvas-container');
-  const cx = container.clientWidth  / 2 - panX;
-  const cy = container.clientHeight / 2 - panY;
+  const cx = (container.clientWidth  / 2 - panX) / zoom;
+  const cy = (container.clientHeight / 2 - panY) / zoom;
   const x = cx - 125 + (events.length * 25 % 200);
   const y = cy -  60 + (events.length * 45 % 300);
   events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
@@ -1228,7 +1347,8 @@ function exportJSON() {
     groups: groups,
     groupIdCounter: groupIdCounter,
     panX: panX,
-    panY: panY
+    panY: panY,
+    zoom: zoom
   };
   
   // 2. Convert to formatted JSON string
@@ -1274,7 +1394,8 @@ function importJSON() {
         if (parsed.panX !== undefined && parsed.panY !== undefined) {
           panX = parsed.panX;
           panY = parsed.panY;
-          document.getElementById('canvas').style.transform = `translate(${panX}px, ${panY}px)`;
+          zoom = parsed.zoom ?? 1;
+          updateCanvasTransform();
         }
         
         // 5. Clear all active selections to prevent phantom errors
@@ -1361,7 +1482,7 @@ if (storedHistory) {
 }
 
 renderCanvas();
-resetView();   // Center pan on the virtual canvas so connections have equal room in all directions
+fitToScreen();  // Fit all seed nodes into view on first load
 renderForm(); 
 generateCode();
 </script>
