@@ -164,6 +164,32 @@
 </div>
 
 <script>
+// Vidas Secas — Event Editor
+// A visual node-graph editor for authoring the game's branching story events.
+// Each "event" is a card with a message and up to 4 options; options can link
+// to another event (by index) or terminate the branch. The whole graph is
+// exported as C initializer arrays for the game to consume.
+//
+// Layout of this file:
+//   1. Config & event-type definitions
+//   2. Global state
+//   3. Undo / redo history
+//   4. General utilities
+//   5. Help modal
+//   6. Groups (visual frames around related nodes)
+//   7. Canvas rendering (nodes + connections)
+//   8. Knife tool (cut connections by drawing a line across them)
+//   9. Canvas input handling (pan, zoom, select, drag, marquee, quick-connect)
+//   10. Properties panel (right sidebar form for the selected event)
+//   11. Option reordering (drag handle in the Properties Panel)
+//   12. Node actions (duplicate, tidy up, grid snap, create/delete)
+//   13. Right panel tabs & collapse toggle
+//   14. Code generation & file import/export
+//   15. Bootstrap (seed data + initial load)
+
+// ══════════════════════════════════════════════════════════════════
+// 1. CONFIG & EVENT-TYPE DEFINITIONS
+// ══════════════════════════════════════════════════════════════════
 const EVENT_TYPES = {
   'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.35)' },
   'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.35)' },
@@ -180,50 +206,65 @@ const GROUP_COLORS = [
   { border: 'rgba(255,100,180,0.6)',bg: 'rgba(255,100,180,0.06)',label: 'rgba(255,100,180,0.18)',text: '#ff80c0' },
 ];
 
+// ══════════════════════════════════════════════════════════════════
+// 2. GLOBAL STATE
+// ══════════════════════════════════════════════════════════════════
+
+// ── Story graph data ──
 let events = [];
 let groups = [];   // { id, name, colorIdx, nodeIndices[] }
 let groupIdCounter = 0;
 
+// ── Selection state ──
 let selectedIdx = null;
 let selectedIndices = new Set();  // multi-selection
 let selectedLink = null;
 let selectedRouter = null;
 let selectedGroupId = null;
 
+// ── Canvas viewport — pan & zoom ──
 const CANVAS_SIZE = 8000; // Virtual canvas dimensions — large enough to never clip connections
 const ZOOM_MIN = 0.1, ZOOM_MAX = 2, ZOOM_STEP = 0.12;
 let panX = 0, panY = 0;  // Will be set to center on init
 let zoom = 1;
 let isPanning = false, startPanX = 0, startPanY = 0;
+
+// ── Node dragging (single node & multi-select) ──
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
+
+// ── Connection dragging / easy-create-on-drop ──
 let activeLinkDrag = null;
 let draggingRouter = null;
-
-// Easy-create: ghost node preview when dragging a connection to empty canvas
 const EASY_CREATE_THRESHOLD = 30; // px in canvas units before ghost appears
 let easyCreateGhost = null; // DOM element for the ghost preview
 
-// Marquee selection
+// ── Marquee (box select) ──
 let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
 
-// Knife tool (Ctrl + drag to cut connections)
+// ── Knife tool (Ctrl + drag to cut connections) ──
 let isKnifing = false, knifeStartX = 0, knifeStartY = 0;
 
-// Group dragging
+// ── Group dragging ──
 let draggingGroupId = null, groupDragOffsets = [];
 let groupRouterOffsets = [];
 let multiRouterOffsets = [];
 
-// Grid snapping
+// ── Grid snapping ──
 let gridSnapEnabled = false;
 const GRID_SIZE = 20;
 
-// ── HISTORY MANAGEMENT (UNDO) ──
+// ── Undo / redo history ──
 const MAX_HISTORY = 128; // Keeps up to 20 states
 let historyStack = [];
 let historyIndex = -1;
 
+// ── Option reordering (drag handle in the Properties Panel) ──
+let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom } }
+
+// ══════════════════════════════════════════════════════════════════
+// 3. UNDO / REDO HISTORY
+// ══════════════════════════════════════════════════════════════════
 function saveState() {
   // Deep clone the current state
   const currentState = JSON.stringify({ events, groups, groupIdCounter, zoom, panX, panY });
@@ -289,21 +330,9 @@ function resetHistory() {
     }
 }
 
-// ── HELP MODAL ──
-function openHelp() {
-  document.getElementById('help-overlay').classList.add('open');
-}
-function closeHelp(e) {
-  if (!e || e.target === document.getElementById('help-overlay') || e.currentTarget.classList.contains('help-close')) {
-    document.getElementById('help-overlay').classList.remove('open');
-  }
-}
-function confirmResetBoard() {
-  closeHelp();
-  setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
-}
-
-// ── UTILITY ──
+// ══════════════════════════════════════════════════════════════════
+// 4. GENERAL UTILITIES
+// ══════════════════════════════════════════════════════════════════
 function snapToGrid(v) {
   return gridSnapEnabled ? Math.round(v / GRID_SIZE) * GRID_SIZE : v;
 }
@@ -334,9 +363,31 @@ function makeEditable(element, initialValue, isTextArea, onSave) {
 //   saveState();
 }
 
-// ── GROUP LOGIC ──
+// C-string escaping for generated code, and HTML escaping for injected markup.
+function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// Flood-fill: given a seed set of node indices, expand to include all reachable nodes via connections
+// ══════════════════════════════════════════════════════════════════
+// 5. HELP MODAL
+// ══════════════════════════════════════════════════════════════════
+function openHelp() {
+  document.getElementById('help-overlay').classList.add('open');
+}
+
+function closeHelp(e) {
+  if (!e || e.target === document.getElementById('help-overlay') || e.currentTarget.classList.contains('help-close')) {
+    document.getElementById('help-overlay').classList.remove('open');
+  }
+}
+
+function confirmResetBoard() {
+  closeHelp();
+  setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 6. GROUPS (visual frames around related nodes)
+// ══════════════════════════════════════════════════════════════════
 function expandGroupToLinked(seedIndices) {
   const result = new Set(seedIndices);
   let changed = true;
@@ -387,7 +438,6 @@ function ungroupAll() {
   }
 }
 
-// Get bounding box of a group (in canvas coords)
 function getGroupBounds(g) {
   const PAD = 28;
   const HEADER = 32;
@@ -400,7 +450,7 @@ function getGroupBounds(g) {
     const h = 44 + 60 + (ev.options?.length > 0 ? optH : 36);
     if (ev.x < minX) minX = ev.x;
     if (ev.y < minY) minY = ev.y;
-    if (ev.x + 250 > maxX) maxX = ev.x + 250;
+    if (ev.x + 260 > maxX) maxX = ev.x + 260;
     if (ev.y + h > maxY) maxY = ev.y + h;
 
     // Include routers in bounds
@@ -435,7 +485,7 @@ function renderGroups() {
     // Override height if minimized
     if (g.isMinimized) {
       bounds.h = 32;  // Keep just the header height
-      bounds.w = 250; // Set to exactly ONE node's width
+      bounds.w = 260; // Set to exactly ONE node's width
     }
 
     const col = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
@@ -538,7 +588,9 @@ function renderGroups() {
   });
 }
 
-// ── RENDER CANVAS ──
+// ══════════════════════════════════════════════════════════════════
+// 7. CANVAS RENDERING (nodes + connections)
+// ══════════════════════════════════════════════════════════════════
 function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
@@ -562,7 +614,6 @@ function renderCanvas() {
     if (isActive) classes += ' active';
     if (isMulti && !isActive) classes += ' multi-selected';
     if (hiddenNodes.has(i)) classes += ' minimized-hidden';
-
 
     div.className = classes;
     div.style.left = `${ev.x}px`;
@@ -692,7 +743,6 @@ function renderCanvas() {
   drawConnections();
 }
 
-// ── PATH BUILDER ──
 function buildPathWithRouters(startX, startY, endX, endY, routers) {
   if (!routers || routers.length === 0) {
     const cp1X = startX + 70, cp1Y = startY;
@@ -701,108 +751,6 @@ function buildPathWithRouters(startX, startY, endX, endY, routers) {
   }
   const pts = [{ x: startX, y: startY }, ...routers, { x: endX, y: endY }];
   return `M ${pts.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-}
-
-// ── KNIFE TOOL HELPERS ──
-// Returns the connection's geometry as a canvas-space polyline (curve sampled into segments
-// when it has no routers), or null if the link doesn't currently exist / isn't visible.
-function computeLinkGeometry(nodeIdx, optionIdx) {
-  const ev = events[nodeIdx];
-  const opt = ev && ev.options && ev.options[optionIdx];
-  if (!opt || opt.nextId === -1 || !events[opt.nextId]) return null;
-
-  const hiddenNodes = new Set();
-  groups.forEach(g => { if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx)); });
-  if (hiddenNodes.has(nodeIdx) || hiddenNodes.has(opt.nextId)) return null;
-
-  const nodeEl = document.querySelector(`.node[data-idx="${nodeIdx}"]`);
-  const handle = nodeEl?.querySelectorAll('.node-output-handle')?.[optionIdx];
-  const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
-  const anchor = targetEl?.querySelector('.node-input-anchor');
-  if (!handle || !anchor) return null;
-
-  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
-  const toCanvas = (sx, sy) => ({ x: (sx - containerRect.left - panX) / zoom, y: (sy - containerRect.top - panY) / zoom });
-  const hRect = handle.getBoundingClientRect();
-  const aRect = anchor.getBoundingClientRect();
-  const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
-  const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
-
-  const routers = opt.routers || [];
-  if (routers.length > 0) return [start, ...routers, end];
-
-  // No routers: sample the same cubic bezier drawn on screen so the cut hit-test matches what's visible
-  const cp1 = { x: start.x + 70, y: start.y };
-  const cp2 = { x: end.x   - 70, y: end.y };
-  const SEGMENTS = 20;
-  const points = [];
-  for (let s = 0; s <= SEGMENTS; s++) {
-    const t = s / SEGMENTS, mt = 1 - t;
-    points.push({
-      x: mt*mt*mt*start.x + 3*mt*mt*t*cp1.x + 3*mt*t*t*cp2.x + t*t*t*end.x,
-      y: mt*mt*mt*start.y + 3*mt*mt*t*cp1.y + 3*mt*t*t*cp2.y + t*t*t*end.y
-    });
-  }
-  return points;
-}
-
-function segmentsIntersect(p1, p2, p3, p4) {
-  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2);
-  const d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);
-  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
-}
-
-function polylineIntersectsSegment(points, a, b) {
-  for (let k = 0; k < points.length - 1; k++) {
-    if (segmentsIntersect(a, b, points[k], points[k + 1])) return true;
-  }
-  return false;
-}
-
-// Live feedback while dragging the knife: highlight whichever links currently cross the blade
-function previewKnifeCuts(canvasA, canvasB) {
-  document.querySelectorAll('.svg-link-group.cut-target').forEach(g => g.classList.remove('cut-target'));
-  events.forEach((ev, i) => {
-    if (!ev.options) return;
-    ev.options.forEach((opt, optIdx) => {
-      if (opt.nextId === -1) return;
-      const pts = computeLinkGeometry(i, optIdx);
-      if (!pts) return;
-      if (polylineIntersectsSegment(pts, canvasA, canvasB)) {
-        const g = document.querySelector(`.svg-link-group[data-node-idx="${i}"][data-opt-idx="${optIdx}"]`);
-        if (g) g.classList.add('cut-target');
-      }
-    });
-  });
-}
-
-// Sever every connection the knife's blade crossed. Coordinates are container-relative screen points.
-function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
-  const a = { x: (screenX1 - panX) / zoom, y: (screenY1 - panY) / zoom };
-  const b = { x: (screenX2 - panX) / zoom, y: (screenY2 - panY) / zoom };
-
-  let cutCount = 0;
-  events.forEach((ev, i) => {
-    if (!ev.options) return;
-    ev.options.forEach((opt, optIdx) => {
-      if (opt.nextId === -1) return;
-      const pts = computeLinkGeometry(i, optIdx);
-      if (!pts) return;
-      if (polylineIntersectsSegment(pts, a, b)) {
-        if (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx) selectedLink = null;
-        opt.nextId = -1;
-        opt.routers = [];
-        cutCount++;
-      }
-    });
-  });
-
-  if (cutCount > 0) {
-    renderCanvas(); // rebuilds node cards too, so output pins and option labels drop their stale "connected" state
-    generateCode();
-    saveState();
-  }
 }
 
 function drawConnections() {
@@ -968,9 +916,116 @@ function updateCanvasTransform() {
   if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
 }
 
-// ── INPUT HANDLERS ──
+// ══════════════════════════════════════════════════════════════════
+// 8. KNIFE TOOL (Ctrl + drag to cut connections)
+// Draws a dashed line while dragging; any connection whose curve crosses that
+// line is severed on release. Connections are sampled into short polylines so
+// straight-line segment-intersection tests work even on curved, router-free links.
+// ══════════════════════════════════════════════════════════════════
+function computeLinkGeometry(nodeIdx, optionIdx) {
+  const ev = events[nodeIdx];
+  const opt = ev && ev.options && ev.options[optionIdx];
+  if (!opt || opt.nextId === -1 || !events[opt.nextId]) return null;
 
-// ── ZOOM (mouse-wheel, pinch via wheel event with ctrlKey) ──
+  const hiddenNodes = new Set();
+  groups.forEach(g => { if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx)); });
+  if (hiddenNodes.has(nodeIdx) || hiddenNodes.has(opt.nextId)) return null;
+
+  const nodeEl = document.querySelector(`.node[data-idx="${nodeIdx}"]`);
+  const handle = nodeEl?.querySelectorAll('.node-output-handle')?.[optionIdx];
+  const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
+  const anchor = targetEl?.querySelector('.node-input-anchor');
+  if (!handle || !anchor) return null;
+
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+  const toCanvas = (sx, sy) => ({ x: (sx - containerRect.left - panX) / zoom, y: (sy - containerRect.top - panY) / zoom });
+  const hRect = handle.getBoundingClientRect();
+  const aRect = anchor.getBoundingClientRect();
+  const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+  const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
+
+  const routers = opt.routers || [];
+  if (routers.length > 0) return [start, ...routers, end];
+
+  // No routers: sample the same cubic bezier drawn on screen so the cut hit-test matches what's visible
+  const cp1 = { x: start.x + 70, y: start.y };
+  const cp2 = { x: end.x   - 70, y: end.y };
+  const SEGMENTS = 20;
+  const points = [];
+  for (let s = 0; s <= SEGMENTS; s++) {
+    const t = s / SEGMENTS, mt = 1 - t;
+    points.push({
+      x: mt*mt*mt*start.x + 3*mt*mt*t*cp1.x + 3*mt*t*t*cp2.x + t*t*t*end.x,
+      y: mt*mt*mt*start.y + 3*mt*mt*t*cp1.y + 3*mt*t*t*cp2.y + t*t*t*end.y
+    });
+  }
+  return points;
+}
+
+function segmentsIntersect(p1, p2, p3, p4) {
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2);
+  const d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+function polylineIntersectsSegment(points, a, b) {
+  for (let k = 0; k < points.length - 1; k++) {
+    if (segmentsIntersect(a, b, points[k], points[k + 1])) return true;
+  }
+  return false;
+}
+
+function previewKnifeCuts(canvasA, canvasB) {
+  document.querySelectorAll('.svg-link-group.cut-target').forEach(g => g.classList.remove('cut-target'));
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach((opt, optIdx) => {
+      if (opt.nextId === -1) return;
+      const pts = computeLinkGeometry(i, optIdx);
+      if (!pts) return;
+      if (polylineIntersectsSegment(pts, canvasA, canvasB)) {
+        const g = document.querySelector(`.svg-link-group[data-node-idx="${i}"][data-opt-idx="${optIdx}"]`);
+        if (g) g.classList.add('cut-target');
+      }
+    });
+  });
+}
+
+function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
+  const a = { x: (screenX1 - panX) / zoom, y: (screenY1 - panY) / zoom };
+  const b = { x: (screenX2 - panX) / zoom, y: (screenY2 - panY) / zoom };
+
+  let cutCount = 0;
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach((opt, optIdx) => {
+      if (opt.nextId === -1) return;
+      const pts = computeLinkGeometry(i, optIdx);
+      if (!pts) return;
+      if (polylineIntersectsSegment(pts, a, b)) {
+        if (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx) selectedLink = null;
+        opt.nextId = -1;
+        opt.routers = [];
+        cutCount++;
+      }
+    });
+  });
+
+  if (cutCount > 0) {
+    renderCanvas(); // rebuilds node cards too, so output pins and option labels drop their stale "connected" state
+    generateCode();
+    saveState();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 9. CANVAS INPUT HANDLING
+// Pan, zoom, marquee-select, node/router/link dragging, the knife tool, and
+// quick-connect-by-dragging-to-empty-canvas all funnel through the handlers below.
+// ══════════════════════════════════════════════════════════════════
+
+// ── Zoom (mouse-wheel, pinch via wheel event with ctrlKey) ──
 document.getElementById('canvas-container').addEventListener('wheel', (e) => {
   e.preventDefault();
 
@@ -993,8 +1048,7 @@ document.getElementById('canvas-container').addEventListener('wheel', (e) => {
   updateCanvasTransform();
 }, { passive: false });
 
-// ── DOUBLE-CLICK QUICK-CONNECT ──
-// Double-click on empty canvas near a node → create new node and wire it from the closest node
+// ── Double-click quick-create ──
 document.getElementById('canvas-container').addEventListener('dblclick', (e) => {
   // Only fire on the canvas background (not on a node or button)
   const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
@@ -1016,6 +1070,7 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
   saveState();
 });
 
+// ── Mouse-down dispatch: knife tool / marquee / pan ──
 function onCanvasMouseDown(e) {
   if (e.ctrlKey || e.metaKey) {
     // Start knife tool — draw a cutting line, sever any connections it crosses on release.
@@ -1118,9 +1173,9 @@ function onNodeMouseDown(e, idx) {
   dragOffsetY = e.clientY / zoom - events[idx].y;
 }
 
+// ── Keyboard shortcuts ──
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
-
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -1248,6 +1303,7 @@ function onHandleMouseDown(e, nodeIdx, optionIdx) {
   };
 }
 
+// ── Global mouse-move / mouse-up (all drag gestures resolve here) ──
 window.onmousemove = (e) => {
   if (draggingOption) {
     onOptionDragMove(e);
@@ -1286,7 +1342,6 @@ window.onmousemove = (e) => {
     const mx1 = (x - panX) / zoom, my1 = (y - panY) / zoom;
     const mx2 = mx1 + w / zoom, my2 = my1 + h / zoom;
 
-
    // Check for hidden nodes
     const hiddenNodes = new Set();
     groups.forEach(g => {
@@ -1299,7 +1354,7 @@ window.onmousemove = (e) => {
 
       if (hiddenNodes.has(i)) return;
 
-      const nx = ev.x, ny = ev.y, nw = 250, nh = 100;
+      const nx = ev.x, ny = ev.y, nw = 260, nh = 100;
       if (nx + nw > mx1 && nx < mx2 && ny + nh > my1 && ny < my2) {
         selectedIndices.add(i);
       }
@@ -1430,7 +1485,6 @@ window.onmouseup = (e) => {
   // Track if a modification actually happened
   const stateChanged = draggingNodeIdx !== null || draggingRouter !== null || draggingMulti || draggingGroupId !== null || activeLinkDrag !== null;
 
-
   isPanning = false;
   draggingNodeIdx = null;
   draggingRouter = null;
@@ -1483,6 +1537,7 @@ window.onmouseup = (e) => {
   if (stateChanged) saveState();
 };
 
+// ── Viewport helpers ──
 function fitToScreen() {
   if (events.length === 0) return;
 
@@ -1535,7 +1590,9 @@ function resetZoom() {
   updateCanvasTransform();
 }
 
-// ── PROPERTIES PANEL ──
+// ══════════════════════════════════════════════════════════════════
+// 10. PROPERTIES PANEL (right sidebar — edit the selected event)
+// ══════════════════════════════════════════════════════════════════
 function renderForm() {
   if (selectedIdx === null) {
     document.getElementById('empty-state').style.display = 'flex';
@@ -1610,9 +1667,40 @@ function renderOptions() {
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
 }
 
-// ── OPTION REORDERING (drag handle in the Properties Panel) ──
-let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom } }
+function updateOptionData(optIdx, field, value) {
+    events[selectedIdx].options[optIdx][field] = value;
+    renderCanvas(); generateCode();
+    saveState();
+}
 
+function addOption() {
+    events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
+
+function removeOption(optIdx) {
+    events[selectedIdx].options.splice(optIdx, 1);
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
+
+function onFieldChange() {
+  const ev = events[selectedIdx];
+  ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
+  ev.message = document.getElementById('f-message').value;
+  document.getElementById('char-count').textContent = ev.message.length;
+  renderCanvas(); generateCode();
+  saveState();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 11. OPTION REORDERING (drag handle in the Properties Panel)
+// An option's nextId/routers travel with it in the array, so reordering is just
+// moving array elements — the canvas connections follow automatically because
+// drawConnections() derives each link's start point from the option's live
+// position (its Nth output pin) at render time.
+// ══════════════════════════════════════════════════════════════════
 function applyDragVisual(card, dy) {
   card.classList.add('dragging');
   card.style.transform = `translateY(${dy}px)`;
@@ -1684,9 +1772,6 @@ function onOptionDragMove(e) {
   applyDragVisual(card, dy);
 }
 
-// Swaps two adjacent options in the data model, re-renders the list and canvas so
-// output pins / connection curves follow the new order, and FLIP-animates the
-// displaced neighbor sliding into its new slot.
 function swapOptions(i, j) {
   const container = document.getElementById('options-container');
   const neighborFirstRect = container.querySelectorAll('.option-card')[j].getBoundingClientRect();
@@ -1724,32 +1809,9 @@ function onOptionDragEnd() {
   saveState();
 }
 
-function updateOptionData(optIdx, field, value) {
-    events[selectedIdx].options[optIdx][field] = value;
-    renderCanvas(); generateCode();
-    saveState();
-}
-function addOption() {
-    events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
-    renderOptions(); renderCanvas(); generateCode();
-    saveState();
-}
-function removeOption(optIdx) {
-    events[selectedIdx].options.splice(optIdx, 1);
-    renderOptions(); renderCanvas(); generateCode();
-    saveState();
-}
-
-function onFieldChange() {
-  const ev = events[selectedIdx];
-  ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
-  ev.message = document.getElementById('f-message').value;
-  document.getElementById('char-count').textContent = ev.message.length;
-  renderCanvas(); generateCode();
-  saveState();
-}
-
-// ── DUPLICATE (Ctrl+D) ──
+// ══════════════════════════════════════════════════════════════════
+// 12. NODE ACTIONS (duplicate, tidy up, grid snap, create/delete)
+// ══════════════════════════════════════════════════════════════════
 function duplicateSelected() {
   const OFFSET = 40;
   const indicesToDupe = selectedIndices.size > 0
@@ -1787,8 +1849,6 @@ function duplicateSelected() {
   saveState();
 }
 
-// ── TIDY UP (left-to-right DAG layout) ──
-// ── TIDY UP (Snap all elements to grid) ──
 function tidyUp() {
   if (events.length === 0) return;
 
@@ -1817,7 +1877,6 @@ function tidyUp() {
   saveState();
 }
 
-// ── GRID SNAP TOGGLE ──
 function toggleGridSnap() {
   gridSnapEnabled = !gridSnapEnabled;
   const btn = document.getElementById('grid-snap-btn');
@@ -1858,6 +1917,9 @@ function deleteEvent() {
   saveState();
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 13. RIGHT PANEL TABS & COLLAPSE TOGGLE
+// ══════════════════════════════════════════════════════════════════
 function switchTab(tab) {
   document.getElementById('tab-edit-btn').className = 'tab-btn' + (tab === 'edit' ? ' active' : '');
   document.getElementById('tab-code-btn').className = 'tab-btn' + (tab === 'code' ? ' active' : '');
@@ -1881,6 +1943,9 @@ function toggleRightPanel() {
 // Restore panel collapsed/expanded state from a previous session
 setPanelCollapsed(localStorage.getItem('vidas_secas_panel_collapsed') === '1');
 
+// ══════════════════════════════════════════════════════════════════
+// 14. CODE GENERATION & FILE IMPORT/EXPORT
+// ══════════════════════════════════════════════════════════════════
 function generateCode() {
   // 1. Calculate incoming links for all events
   const incomingCounts = new Array(events.length).fill(0);
@@ -2012,12 +2077,9 @@ function copyCode() {
   });
 }
 
-function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-// Seed nodes are offset to the center of the virtual 8000×8000 canvas (CANVAS_SIZE/2 ≈ 4000).
-// Original layout spans ~0–1700 x, ~0–640 y; center of content ≈ (850, 290).
-// Offset = 4000 - 850 = 3150 in X,  4000 - 290 = 3710 in Y  → content sits at canvas center.
+// ══════════════════════════════════════════════════════════════════
+// 15. BOOTSTRAP — seed data & initial load
+// ══════════════════════════════════════════════════════════════════
 const SEED_OX = 3150, SEED_OY = 3710;
 const seed = [
   { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+40 },
@@ -2038,6 +2100,7 @@ const seed = [
   { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+540 },
   { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+1450, y: SEED_OY+540 },
 ];
+
 // Check for stored history
 const storedHistory = localStorage.getItem('vidas_secas_history');
 if (storedHistory) {
@@ -2061,7 +2124,7 @@ if (storedHistory) {
 
 renderCanvas();
 fitToScreen();  // Fit all seed nodes into view on first load
-renderForm(); 
+renderForm();
 generateCode();
 </script>
 </body>
