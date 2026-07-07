@@ -24,6 +24,9 @@
     <div id="nodes-layer"></div>
   </div>
   <div id="marquee"></div>
+  <svg id="knife-layer" class="knife-layer">
+    <line id="knife-line" x1="0" y1="0" x2="0" y2="0"/>
+  </svg>
   <button class="panel-reopen-btn" id="panel-reopen-btn" onclick="toggleRightPanel()" title="Expand panel">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
       <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
@@ -146,6 +149,7 @@
         <div class="help-row"><kbd>Ctrl + click line</kbd><span>Add a router waypoint</span></div>
         <div class="help-row"><kbd>Click line</kbd><span>Select connection</span></div>
         <div class="help-row"><kbd>Delete</kbd><span>Remove selected connection</span></div>
+        <div class="help-row"><kbd>Ctrl + drag (empty canvas)</kbd><span>Knife tool — cut every connection the line crosses</span></div>
       </div>
 
       <div class="help-section-label help-section-label-danger">Danger Zone</div>
@@ -201,6 +205,9 @@ let easyCreateGhost = null; // DOM element for the ghost preview
 
 // Marquee selection
 let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
+
+// Knife tool (Ctrl + drag to cut connections)
+let isKnifing = false, knifeStartX = 0, knifeStartY = 0;
 
 // Group dragging
 let draggingGroupId = null, groupDragOffsets = [];
@@ -695,6 +702,108 @@ function buildPathWithRouters(startX, startY, endX, endY, routers) {
   return `M ${pts.map(p => `${p.x} ${p.y}`).join(' L ')}`;
 }
 
+// ── KNIFE TOOL HELPERS ──
+// Returns the connection's geometry as a canvas-space polyline (curve sampled into segments
+// when it has no routers), or null if the link doesn't currently exist / isn't visible.
+function computeLinkGeometry(nodeIdx, optionIdx) {
+  const ev = events[nodeIdx];
+  const opt = ev && ev.options && ev.options[optionIdx];
+  if (!opt || opt.nextId === -1 || !events[opt.nextId]) return null;
+
+  const hiddenNodes = new Set();
+  groups.forEach(g => { if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx)); });
+  if (hiddenNodes.has(nodeIdx) || hiddenNodes.has(opt.nextId)) return null;
+
+  const nodeEl = document.querySelector(`.node[data-idx="${nodeIdx}"]`);
+  const handle = nodeEl?.querySelectorAll('.node-output-handle')?.[optionIdx];
+  const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
+  const anchor = targetEl?.querySelector('.node-input-anchor');
+  if (!handle || !anchor) return null;
+
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+  const toCanvas = (sx, sy) => ({ x: (sx - containerRect.left - panX) / zoom, y: (sy - containerRect.top - panY) / zoom });
+  const hRect = handle.getBoundingClientRect();
+  const aRect = anchor.getBoundingClientRect();
+  const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+  const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
+
+  const routers = opt.routers || [];
+  if (routers.length > 0) return [start, ...routers, end];
+
+  // No routers: sample the same cubic bezier drawn on screen so the cut hit-test matches what's visible
+  const cp1 = { x: start.x + 70, y: start.y };
+  const cp2 = { x: end.x   - 70, y: end.y };
+  const SEGMENTS = 20;
+  const points = [];
+  for (let s = 0; s <= SEGMENTS; s++) {
+    const t = s / SEGMENTS, mt = 1 - t;
+    points.push({
+      x: mt*mt*mt*start.x + 3*mt*mt*t*cp1.x + 3*mt*t*t*cp2.x + t*t*t*end.x,
+      y: mt*mt*mt*start.y + 3*mt*mt*t*cp1.y + 3*mt*t*t*cp2.y + t*t*t*end.y
+    });
+  }
+  return points;
+}
+
+function segmentsIntersect(p1, p2, p3, p4) {
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2);
+  const d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+function polylineIntersectsSegment(points, a, b) {
+  for (let k = 0; k < points.length - 1; k++) {
+    if (segmentsIntersect(a, b, points[k], points[k + 1])) return true;
+  }
+  return false;
+}
+
+// Live feedback while dragging the knife: highlight whichever links currently cross the blade
+function previewKnifeCuts(canvasA, canvasB) {
+  document.querySelectorAll('.svg-link-group.cut-target').forEach(g => g.classList.remove('cut-target'));
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach((opt, optIdx) => {
+      if (opt.nextId === -1) return;
+      const pts = computeLinkGeometry(i, optIdx);
+      if (!pts) return;
+      if (polylineIntersectsSegment(pts, canvasA, canvasB)) {
+        const g = document.querySelector(`.svg-link-group[data-node-idx="${i}"][data-opt-idx="${optIdx}"]`);
+        if (g) g.classList.add('cut-target');
+      }
+    });
+  });
+}
+
+// Sever every connection the knife's blade crossed. Coordinates are container-relative screen points.
+function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
+  const a = { x: (screenX1 - panX) / zoom, y: (screenY1 - panY) / zoom };
+  const b = { x: (screenX2 - panX) / zoom, y: (screenY2 - panY) / zoom };
+
+  let cutCount = 0;
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach((opt, optIdx) => {
+      if (opt.nextId === -1) return;
+      const pts = computeLinkGeometry(i, optIdx);
+      if (!pts) return;
+      if (polylineIntersectsSegment(pts, a, b)) {
+        if (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx) selectedLink = null;
+        opt.nextId = -1;
+        opt.routers = [];
+        cutCount++;
+      }
+    });
+  });
+
+  if (cutCount > 0) {
+    drawConnections();
+    generateCode();
+    saveState();
+  }
+}
+
 function drawConnections() {
   const svg = document.getElementById('svg-layer');
   svg.innerHTML = '';
@@ -741,6 +850,8 @@ function drawConnections() {
 
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('class', 'svg-link-group');
+      group.setAttribute('data-node-idx', i);
+      group.setAttribute('data-opt-idx', optIdx);
 
       const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       hitPath.setAttribute('d', pathString);
@@ -905,6 +1016,24 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
 });
 
 function onCanvasMouseDown(e) {
+  if (e.ctrlKey || e.metaKey) {
+    // Start knife tool — draw a cutting line, sever any connections it crosses on release.
+    // (Nodes stop propagation on their own mousedown, so reaching here means we're over
+    // empty canvas or a link's hit-area — both valid places to begin a cut.)
+    isKnifing = true;
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    knifeStartX = e.clientX - containerRect.left;
+    knifeStartY = e.clientY - containerRect.top;
+    const knifeLayer = document.getElementById('knife-layer');
+    const line = document.getElementById('knife-line');
+    line.setAttribute('x1', knifeStartX);
+    line.setAttribute('y1', knifeStartY);
+    line.setAttribute('x2', knifeStartX);
+    line.setAttribute('y2', knifeStartY);
+    knifeLayer.style.display = 'block';
+    return;
+  }
+
   const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
   if (!onBg) return;
 
@@ -1119,6 +1248,20 @@ function onHandleMouseDown(e, nodeIdx, optionIdx) {
 }
 
 window.onmousemove = (e) => {
+  if (isKnifing) {
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    const curX = e.clientX - containerRect.left;
+    const curY = e.clientY - containerRect.top;
+    const line = document.getElementById('knife-line');
+    line.setAttribute('x2', curX);
+    line.setAttribute('y2', curY);
+
+    const a = { x: (knifeStartX - panX) / zoom, y: (knifeStartY - panY) / zoom };
+    const b = { x: (curX - panX) / zoom, y: (curY - panY) / zoom };
+    previewKnifeCuts(a, b);
+    return;
+  }
+
   if (isMarquee) {
     const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
     const curX = e.clientX - containerRect.left;
@@ -1255,6 +1398,17 @@ window.onmousemove = (e) => {
 };
 
 window.onmouseup = (e) => {
+  if (isKnifing) {
+    isKnifing = false;
+    document.getElementById('knife-layer').style.display = 'none';
+    document.querySelectorAll('.svg-link-group.cut-target').forEach(g => g.classList.remove('cut-target'));
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    const endX = e.clientX - containerRect.left;
+    const endY = e.clientY - containerRect.top;
+    cutConnectionsAlongLine(knifeStartX, knifeStartY, endX, endY);
+    return;
+  }
+
   if (isMarquee) {
     isMarquee = false;
     document.getElementById('marquee').style.display = 'none';
