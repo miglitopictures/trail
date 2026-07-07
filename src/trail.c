@@ -150,7 +150,7 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
 
 typedef struct {
     int numTotal;
-    int numVisited;
+    // int numVisited;
     Inventory Inventory[MAX_CHECKPOINTS];
     float distance[MAX_CHECKPOINTS];
     char  name[MAX_CHECKPOINTS][32];
@@ -166,7 +166,7 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory
 typedef struct {
     int hours;
     float distance;
-    enum State gameState;
+    enum State state;
     int currentEvent;
     int checkpointsVisited;
     Party party;
@@ -226,47 +226,47 @@ int main() {
     events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR);
 
     // setup gameplay data
+    GameData game = {0};
+    game.state = STATE_PLAYING;
+    game.hours = 0;
+    game.distance = 0;
+
     bool moving = false;
-    enum State gameState = STATE_PLAYING;
-    int hours = 0;
-    float distance = 0;
-
-    int currentEventId; // id of current event
-
-    // stop menu globals
-    int activeStopMenu  =  0;
-    int activeStopSubmenu = -1;
-
     // move timer
     Timer moveTimer;
     setTimer(&moveTimer, 0.7);
 
-    Party party;
+
+    // stop menu globals
+    int activeStopMenu  =  0;
+    int activeStopSubmenu = -1;
+    
+
     { // setup party
-        party.count = 4;
-        strcpy(party.member[0].name, "Fabiano");
-        party.member[0].velocity = 5;
-        strcpy(party.member[1].name, "Vitória");
-        party.member[1].velocity = 4;
-        strcpy(party.member[2].name, "Mais Novo");
-        party.member[2].velocity = 4;
-        strcpy(party.member[3].name, "Mais Velho");
-        party.member[3].velocity = 6;
+        game.party.count = 4;
+        strcpy(game.party.member[0].name, "Fabiano");
+        game.party.member[0].velocity = 5;
+        strcpy(game.party.member[1].name, "Vitória");
+        game.party.member[1].velocity = 4;
+        strcpy(game.party.member[2].name, "Mais Novo");
+        game.party.member[2].velocity = 4;
+        strcpy(game.party.member[3].name, "Mais Velho");
+        game.party.member[3].velocity = 6;
 
         for (int i = 0; i < 4; i++) {
-            party.member[i].health = 100;
-            party.member[i].energy = 100;
-            party.member[i].sick = false;
-            party.member[i].dead = false;
+            game.party.member[i].health = 100;
+            game.party.member[i].energy = 100;
+            game.party.member[i].sick = false;
+            game.party.member[i].dead = false;
         }
 
         // inventory init
-        party.inventory.ammo = 10;
-        party.inventory.weapon = 1;
-        party.inventory.food = 50;
-        party.inventory.footwear = 4;
-        party.money = 70;
-        party.ration = MEDIUM;
+        game.party.inventory.ammo = 10;
+        game.party.inventory.weapon = 1;
+        game.party.inventory.food = 50;
+        game.party.inventory.footwear = 4;
+        game.party.money = 70;
+        game.party.ration = MEDIUM;
     }
         
     const int windowWidth = 1200;
@@ -281,30 +281,30 @@ int main() {
 
         // Restart
         if (IsKeyPressed(KEY_R)) {
-            hours = 0;
-            distance = 0;
-            gameState = STATE_PLAYING;
-            checkpoints.numVisited = 0;
+            game.hours = 0;
+            game.distance = 0;
+            game.state = STATE_PLAYING;
+            game.checkpointsVisited = 0;
             for (int i = 0; i < 4; i++) {
-                party.member[i].health = 100;
-                party.member[i].energy = 100;
-                party.member[i].sick = false;
-                party.member[i].dead = false;
+                game.party.member[i].health = 100;
+                game.party.member[i].energy = 100;
+                game.party.member[i].sick = false;
+                game.party.member[i].dead = false;
             }
-            party.count = 4;
-            party.inventory.ammo = 10;
-            party.inventory.weapon = 1;
-            party.inventory.food = 50;
-            party.inventory.footwear = 4;
-            party.money = 70;
-            party.ration = MEDIUM;
+            game.party.count = 4;
+            game.party.inventory.ammo = 10;
+            game.party.inventory.weapon = 1;
+            game.party.inventory.food = 50;
+            game.party.inventory.footwear = 4;
+            game.party.money = 70;
+            game.party.ration = MEDIUM;
         }
 
         if (IsKeyPressed(KEY_F)) {
-            currentEventId = EMPTY_HOUSE;
+            game.currentEvent = EMPTY_HOUSE;
         }
         if (IsKeyPressed(KEY_G)) {
-            currentEventId = FOUND_STRANGER;
+            game.currentEvent = FOUND_STRANGER;
         }
 
         // Save Game
@@ -312,16 +312,7 @@ int main() {
             FILE *file = fopen("./saves/save01.vd", "wb");
 
             if (file == NULL) break;
-
-            GameData data;
-            data.hours = hours;
-            data.distance = distance;
-            data.gameState = gameState;
-            data.currentEvent = currentEventId;
-            data.party = party;
-            data.checkpointsVisited = checkpoints.numVisited;
-
-            fwrite(&data, sizeof(GameData), 1, file);
+            fwrite(&game, sizeof(GameData), 1, file);
             fclose(file);
         }
 
@@ -336,12 +327,8 @@ int main() {
                 printf("VS_STATUS: :) Data loaded sucessfully!");
                 fclose(file);
 
-                hours = data.hours;
-                distance = data.distance;
-                gameState = data.gameState;
-                currentEventId = data.currentEvent;
-                party = data.party;
-                checkpoints.numVisited = data.checkpointsVisited;
+                game = data;
+
             } else {
                 printf("VS_ERROR: :() Data couldn`t load.");
                 fclose(file);
@@ -350,7 +337,7 @@ int main() {
 
         // Rest
         if (IsKeyPressed(KEY_D)) {
-            rest(&party, &hours);
+            rest(&game.party, &game.hours);
         }
         
         if (moving){
@@ -364,73 +351,73 @@ int main() {
                 float velocityParty = 0;
                 int hoursSimulated = 3;
 
-                party.count = 0;
+                game.party.count = 0;
                 for (int i = 0; i < 4; i++) {
 
-                    if (party.member[i].dead) continue;
+                    if (game.party.member[i].dead) continue;
 
                     // eat
-                    bool couldEat = party.inventory.food >= party.ration;
+                    bool couldEat = game.party.inventory.food >= game.party.ration;
                     if (couldEat) {
-                        party.inventory.food -= party.ration; // decrement total food
+                        game.party.inventory.food -= game.party.ration; // decrement total food
                     } else {
-                        party.inventory.food = 0;
+                        game.party.inventory.food = 0;
                     }; 
                 
                     // simulate sickness
-                    if (!party.member[i].sick && party.member[i].energy < 70){
+                    if (!game.party.member[i].sick && game.party.member[i].energy < 70){
                         int roll = GetRandomValue(1,100);
-                        int chanceOfSickness = party.member[i].energy < 30 ? 10 : 3;
+                        int chanceOfSickness = game.party.member[i].energy < 30 ? 10 : 3;
                         if (roll < chanceOfSickness){
-                            party.member[i].sick = true;
+                            game.party.member[i].sick = true;
                         }
                     } else {
                         int roll = GetRandomValue(0,100);
                         if (roll < 10){
-                            party.member[i].sick = false;
+                            game.party.member[i].sick = false;
                         }
                     }
 
                     // simulate energy loss
-                    party.member[i].energy -= GetRandomValue(3,15);
-                    party.member[i].energy = clampInt(party.member[i].energy, 0, 100);
+                    game.party.member[i].energy -= GetRandomValue(3,15);
+                    game.party.member[i].energy = clampInt(game.party.member[i].energy, 0, 100);
 
                     // simulate health loss (damage)
-                    bool isSick = party.member[i].sick;
+                    bool isSick = game.party.member[i].sick;
                     int damage = GetRandomValue(isSick || !couldEat ? 1 : 0, 5);
                     damage = damage * (isSick ? 2 : 1); // if sick
-                    damage = damage * (party.member[i].energy == 0 ? 2 : 1); // if exausted
-                    damage = damage * (4 - party.ration); // ration size dependent health
+                    damage = damage * (game.party.member[i].energy == 0 ? 2 : 1); // if exausted
+                    damage = damage * (4 - game.party.ration); // ration size dependent health
                     damage = damage * (couldEat? 1 : 2);
 
-                    party.member[i].health -= damage;
-                    if (party.member[i].health <= 0) {
-                        party.member[i].health = 0;
-                        party.member[i].dead = true;
+                    game.party.member[i].health -= damage;
+                    if (game.party.member[i].health <= 0) {
+                        game.party.member[i].health = 0;
+                        game.party.member[i].dead = true;
                         continue;
                     } // clamp health to zero 0
 
                     // its aliveee (contando os vivos)
-                    party.count++;
+                    game.party.count++;
 
                     // soma velocidades para gerar media
-                    velocityParty += party.member[i].velocity * ((float) party.member[i].health / (float) 100) * ((float) party.member[i].energy / (float) 100);                        
+                    velocityParty += game.party.member[i].velocity * ((float) game.party.member[i].health / (float) 100) * ((float) game.party.member[i].energy / (float) 100);                        
                 }
 
-                velocityParty = party.count > 0 ? (velocityParty / party.count) : 0;
+                velocityParty = game.party.count > 0 ? (velocityParty / game.party.count) : 0;
                 
-                distance += velocityParty * hoursSimulated;
-                hours += hoursSimulated;
+                game.distance += velocityParty * hoursSimulated;
+                game.hours += hoursSimulated;
 
 
                 // check gameover
-                if (party.count == 0) {
-                    gameState = STATE_GAMEOVER;
+                if (game.party.count == 0) {
+                    game.state = STATE_GAMEOVER;
                 }
 
-                if (distance >= checkpoints.distance[checkpoints.numVisited] && checkpoints.numVisited < checkpoints.numTotal) {
-                    distance = checkpoints.distance[checkpoints.numVisited];
-                    gameState = STATE_STOP_CHECKPOINT;
+                if (game.distance >= checkpoints.distance[game.checkpointsVisited] && game.checkpointsVisited < checkpoints.numTotal) {
+                    game.distance = checkpoints.distance[game.checkpointsVisited];
+                    game.state = STATE_STOP_CHECKPOINT;
                     activeStopMenu = 3;
                 }
 
@@ -438,7 +425,7 @@ int main() {
                 bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                 if (eventShouldHappen) {
 
-                    triggerEvent(GetRandomValue(0,10), &currentEventId, &gameState, &hours);
+                    triggerEvent(GetRandomValue(0,10), &game.currentEvent, &game.state, &game.hours);
 
                 }
             }
@@ -447,7 +434,7 @@ int main() {
         // Enter
         if (!moving && (IsKeyPressed(KEY_ENTER))) {
 
-            switch (gameState) {
+            switch (game.state) {
 
                 case STATE_STOP_CHECKPOINT:
                     // checkpoints.numVisited++;
@@ -456,10 +443,10 @@ int main() {
                     break;
                 
                 case STATE_EVENT:
-                    if (events[currentEventId].numOptions > 0) {
+                    if (events[game.currentEvent].numOptions > 0) {
                         break;
                     }
-                    gameState = STATE_PLAYING;
+                    game.state = STATE_PLAYING;
                     moving = true;
                     break;
                     
@@ -480,7 +467,7 @@ int main() {
             ClearBackground(BLACK);
 
             // Draw Gameover
-            if (gameState == STATE_GAMEOVER) {
+            if (game.state == STATE_GAMEOVER) {
                 int size = 30;
                 char *text = "EVERYONE DIED!";
                 int width = MeasureText(text, size);
@@ -488,32 +475,32 @@ int main() {
             }
 
             // Draw Event
-            if (gameState == STATE_EVENT) {
+            if (game.state == STATE_EVENT) {
 
                 int size = 30;
-                int width = MeasureText(events[currentEventId].message, size);
+                int width = MeasureText(events[game.currentEvent].message, size);
                 int x = windowWidth / 2 - width / 2;
                 int y =  windowHeight / 2;
 
-                if (events[currentEventId].numOptions == 0) {
+                if (events[game.currentEvent].numOptions == 0) {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(events[currentEventId].message, x, y, size, WHITE);
+                    DrawText(events[game.currentEvent].message, x, y, size, WHITE);
                 } else {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(events[currentEventId].message, x, y, size, WHITE);
+                    DrawText(events[game.currentEvent].message, x, y, size, WHITE);
 
                     int opWidth = 200;
                     int opGap = 20;
-                    int opTotalWidth = (events[currentEventId].numOptions - 1) * (opWidth + opGap) + opWidth;
+                    int opTotalWidth = (events[game.currentEvent].numOptions - 1) * (opWidth + opGap) + opWidth;
 
-                    for (int i = 0; i < events[currentEventId].numOptions; i++)
+                    for (int i = 0; i < events[game.currentEvent].numOptions; i++)
                     {
                         
-                        if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),540,opWidth,40}, events[currentEventId].options[i].message)) {
-                            if (events[currentEventId].options[i].nextId != -1) {
-                                triggerEvent(events[currentEventId].options[i].nextId, &currentEventId, &gameState, &hours);
+                        if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),540,opWidth,40}, events[game.currentEvent].options[i].message)) {
+                            if (events[game.currentEvent].options[i].nextId != -1) {
+                                triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours);
                             } else {
-                                gameState = STATE_PLAYING;
+                                game.state = STATE_PLAYING;
                             }
                         }
                     }
@@ -522,17 +509,17 @@ int main() {
                 
             }
 
-            if (gameState == STATE_PLAYING){
+            if (game.state == STATE_PLAYING){
                 int height = 60;
                 int width = 200;
                 int margin = 60;
                 if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Stop")) {
-                    gameState = STATE_STOP;
+                    game.state = STATE_STOP;
                     activeStopMenu = 0;
                 }
             }
             
-            if (gameState == STATE_PLAYING || gameState == STATE_EVENT) {// Moving?
+            if (game.state == STATE_PLAYING || game.state == STATE_EVENT) {// Moving?
                 
                 { // Draw action text -- "Moving" : "Enter to continue"
                     int size = 30;
@@ -546,11 +533,11 @@ int main() {
                 
                 { // Draw Hours, Distance, Food, Party Count
                     int size = 30;
-                    DrawText(TextFormat("Horas: %02d", hours),             30,  30, size, WHITE);
-                    DrawText(TextFormat("Distância: %.2fKm", distance),    30,  60, size, WHITE);
-                    DrawText(TextFormat("Food: %d", party.inventory.food), 30,  90, size, WHITE);
-                    DrawText(TextFormat("Alive: %d", party.count),         30, 120, size, WHITE);
-                    DrawText(TextFormat("Money: %d", party.money),         30, 150, size, WHITE);
+                    DrawText(TextFormat("Horas: %02d", game.hours),             30,  30, size, WHITE);
+                    DrawText(TextFormat("Distância: %.2fKm", game.distance),    30,  60, size, WHITE);
+                    DrawText(TextFormat("Food: %d", game.party.inventory.food), 30,  90, size, WHITE);
+                    DrawText(TextFormat("Alive: %d", game.party.count),         30, 120, size, WHITE);
+                    DrawText(TextFormat("Money: %d", game.party.money),         30, 150, size, WHITE);
                 }
 
 
@@ -558,24 +545,24 @@ int main() {
                 for (int i = 3; i >= 0; i--) {
                     int size = 30;
                     int posY = windowHeight - 50 - ((3-i)*30);
-                    Color textColor = party.member[i].health == 0 ? RED : WHITE;
-                    DrawText(party.member[i].name, 30, posY, 30, textColor);
-                    DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
-                    if (party.member[i].health == 0) {
+                    Color textColor = game.party.member[i].health == 0 ? RED : WHITE;
+                    DrawText(game.party.member[i].name, 30, posY, 30, textColor);
+                    DrawText(TextFormat("%03d", game.party.member[i].health), 230, posY, size, textColor);
+                    if (game.party.member[i].health == 0) {
                         DrawText("(dead)", 310, posY, 30, textColor);
                         
-                    } else if (party.member[i].sick) {
+                    } else if (game.party.member[i].sick) {
                         DrawText("(sick)", 310, posY, 30, textColor);
                         
                     }
-                    DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
+                    DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
                 }
             }
 
             // Stop Menu
-            bool inCheckpoint = (gameState == STATE_STOP_CHECKPOINT);
+            bool inCheckpoint = (game.state == STATE_STOP_CHECKPOINT);
 
-            if (gameState == STATE_STOP || inCheckpoint) {
+            if (game.state == STATE_STOP || inCheckpoint) {
                 int height = 60;
                 int width = 200;
                 #define SUBMENU_NONE -1
@@ -590,35 +577,35 @@ int main() {
                     
                     const char* leaveText = inCheckpoint? "Leave" : "Back";  
                     if (GuiButton((Rectangle) {windowWidth - width, windowHeight - height, width, height}, leaveText)) {
-                        if (inCheckpoint) checkpoints.numVisited++; // leave checkpoint
-                        gameState = STATE_PLAYING;
+                        if (inCheckpoint) game.checkpointsVisited++; // leave checkpoint
+                        game.state = STATE_PLAYING;
                         moving = false;
                     }
 
                     switch (activeStopMenu) {
                     case 0 /* Party */:  
-                        if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&party, &hours);
+                        if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&game.party, &game.hours);
                         // Draw status bar (party health)
                         for (int i = 3; i >= 0; i--) {
                             int size = 30;
                             int posY = windowHeight - 120 - ((3-i)*30);
-                            Color textColor = party.member[i].health == 0 ? RED : WHITE;
-                            DrawText(party.member[i].name, 30, posY, 30, textColor);
-                            DrawText(TextFormat("%03d", party.member[i].health), 230, posY, size, textColor);
+                            Color textColor = game.party.member[i].health == 0 ? RED : WHITE;
+                            DrawText(game.party.member[i].name, 30, posY, 30, textColor);
+                            DrawText(TextFormat("%03d", game.party.member[i].health), 230, posY, size, textColor);
 
-                            if (party.member[i].health == 0){
+                            if (game.party.member[i].health == 0){
                                 DrawText("(dead)", 310, posY, 30, textColor);
-                            } else if (party.member[i].sick) {
+                            } else if (game.party.member[i].sick) {
                                 DrawText("(sick)", 310, posY, 30, textColor);
                             }
 
-                            DrawText(TextFormat("energy: %03d", party.member[i].energy), 410, posY, size, textColor);
+                            DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
                         }
                         
                         { // Draw Hours, Distance, Food, Party Count
                             int size = 30;
-                            DrawText(TextFormat("Horas: %02d", hours),             30,  230, size, WHITE);
-                            DrawText(TextFormat("Food: %d", party.inventory.food), 30,  260, size, WHITE);
+                            DrawText(TextFormat("Horas: %02d", game.hours),             30,  230, size, WHITE);
+                            DrawText(TextFormat("Food: %d", game.party.inventory.food), 30,  260, size, WHITE);
                         }
                         break;
                     case 1 /* Car */:  
@@ -636,11 +623,11 @@ int main() {
                         
                         { // Draw city
                             int size = 30;
-                            int width = MeasureText(checkpoints.name[checkpoints.numVisited], size);
+                            int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
                             int x = windowWidth / 2 - width / 2;
                             int y =  windowHeight / 2;
                             DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
-                            DrawText(checkpoints.name[checkpoints.numVisited], x, y, size, BLACK);
+                            DrawText(checkpoints.name[game.checkpointsVisited], x, y, size, BLACK);
                         }
                         if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeStopSubmenu = SUBMENU_BUY;
                         if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeStopSubmenu = SUBMENU_SELL;
@@ -653,16 +640,16 @@ int main() {
                     
                     int margin = 60;
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
-                    DrawText(TextFormat("Money: %d", party.money), 30, windowHeight - 60, 30, WHITE);
+                    DrawText(TextFormat("Money: %d", game.party.money), 30, windowHeight - 60, 30, WHITE);
                     // (Inventory) {food, ammo, weapon, footwear}
-                    DrawText(TextFormat("FOOD:  %03d", checkpoints.Inventory[checkpoints.numVisited].food),       60,  40, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].food, &party.inventory.food, 5, &party.money);
-                    DrawText(TextFormat("AMMO:  %03d", checkpoints.Inventory[checkpoints.numVisited].ammo),       60,  80, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].ammo, &party.inventory.ammo, 5, &party.money);
-                    DrawText(TextFormat("GUNS:  %03d", checkpoints.Inventory[checkpoints.numVisited].weapon),     60, 120, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].weapon, &party.inventory.weapon, 10, &party.money);
-                    DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[checkpoints.numVisited].footwear),   60, 160, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[checkpoints.numVisited].footwear, &party.inventory.footwear, 10, &party.money);
+                    DrawText(TextFormat("FOOD:  %03d", checkpoints.Inventory[game.checkpointsVisited].food),       60,  40, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].food, &game.party.inventory.food, 5, &game.party.money);
+                    DrawText(TextFormat("AMMO:  %03d", checkpoints.Inventory[game.checkpointsVisited].ammo),       60,  80, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].ammo, &game.party.inventory.ammo, 5, &game.party.money);
+                    DrawText(TextFormat("GUNS:  %03d", checkpoints.Inventory[game.checkpointsVisited].weapon),     60, 120, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].weapon, &game.party.inventory.weapon, 10, &game.party.money);
+                    DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[game.checkpointsVisited].footwear),   60, 160, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].footwear, &game.party.inventory.footwear, 10, &game.party.money);
                 }
                 else if (activeStopSubmenu == SUBMENU_SELL) {
                     int margin = 60;
