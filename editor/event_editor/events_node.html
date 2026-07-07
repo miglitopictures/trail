@@ -135,6 +135,7 @@
         <div class="help-row"><kbd>Ctrl D</kbd><span>Duplicate selected node(s)</span></div>
         <div class="help-row"><kbd>Delete / Backspace</kbd><span>Delete selected node or link</span></div>
         <div class="help-row"><kbd>Ctrl Z</kbd><span>Undo</span></div>
+        <div class="help-row"><kbd>⋮⋮ in Properties Panel</kbd><span>Drag to reorder option branches</span></div>
       </div>
 
       <div class="help-section-label">Selection</div>
@@ -1248,6 +1249,11 @@ function onHandleMouseDown(e, nodeIdx, optionIdx) {
 }
 
 window.onmousemove = (e) => {
+  if (draggingOption) {
+    onOptionDragMove(e);
+    return;
+  }
+
   if (isKnifing) {
     const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
     const curX = e.clientX - containerRect.left;
@@ -1398,6 +1404,11 @@ window.onmousemove = (e) => {
 };
 
 window.onmouseup = (e) => {
+  if (draggingOption) {
+    onOptionDragEnd();
+    return;
+  }
+
   if (isKnifing) {
     isKnifing = false;
     document.getElementById('knife-layer').style.display = 'none';
@@ -1565,6 +1576,7 @@ function renderOptions() {
   ev.options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'option-card';
+    card.setAttribute('data-opt-idx', i);
     const optionsHtml = events.map((targetEv, targetIdx) => {
       if (targetIdx === selectedIdx) return '';
       const label = targetEv.define
@@ -1574,6 +1586,13 @@ function renderOptions() {
     }).join('');
     card.innerHTML = `
       <div class="option-card-header">
+        <span class="option-drag-handle" onmousedown="onOptionDragStart(event, ${i})" title="Drag to reorder">
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
+            <circle cx="2.5" cy="3" r="1.3" fill="currentColor"/><circle cx="7.5" cy="3" r="1.3" fill="currentColor"/>
+            <circle cx="2.5" cy="8" r="1.3" fill="currentColor"/><circle cx="7.5" cy="8" r="1.3" fill="currentColor"/>
+            <circle cx="2.5" cy="13" r="1.3" fill="currentColor"/><circle cx="7.5" cy="13" r="1.3" fill="currentColor"/>
+          </svg>
+        </span>
         <span class="option-num">${i + 1}</span>
         <input type="text" value="${escHtml(opt.message)}" oninput="updateOptionData(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
@@ -1589,6 +1608,99 @@ function renderOptions() {
     container.appendChild(card);
   });
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
+}
+
+// ── OPTION REORDERING (drag handle in the Properties Panel) ──
+let draggingOption = null; // { idx, startClientY }
+
+function applyDragVisual(card, dy) {
+  card.classList.add('dragging');
+  card.style.transform = `translateY(${dy}px)`;
+}
+
+function onOptionDragStart(e, idx) {
+  e.preventDefault();
+  e.stopPropagation();
+  const container = document.getElementById('options-container');
+  const card = container.querySelectorAll('.option-card')[idx];
+  if (!card) return;
+  draggingOption = { idx, startClientY: e.clientY };
+  card.classList.add('dragging');
+  document.body.style.userSelect = 'none';
+}
+
+function onOptionDragMove(e) {
+  if (!draggingOption) return;
+  const container = document.getElementById('options-container');
+  let cards = [...container.querySelectorAll('.option-card')];
+  let card = cards[draggingOption.idx];
+  if (!card) return;
+
+  const dy = e.clientY - draggingOption.startClientY;
+  card.style.transform = `translateY(${dy}px)`;
+
+  // Bubble the dragged card past earlier siblings once the pointer crosses their midpoint
+  while (draggingOption.idx > 0) {
+    const prevRect = cards[draggingOption.idx - 1].getBoundingClientRect();
+    if (e.clientY < prevRect.top + prevRect.height / 2) {
+      swapOptions(draggingOption.idx, draggingOption.idx - 1);
+      draggingOption.idx--;
+      cards = [...container.querySelectorAll('.option-card')];
+      card = cards[draggingOption.idx];
+      applyDragVisual(card, dy);
+    } else break;
+  }
+  // Bubble the dragged card past later siblings once the pointer crosses their midpoint
+  while (draggingOption.idx < cards.length - 1) {
+    const nextRect = cards[draggingOption.idx + 1].getBoundingClientRect();
+    if (e.clientY > nextRect.top + nextRect.height / 2) {
+      swapOptions(draggingOption.idx, draggingOption.idx + 1);
+      draggingOption.idx++;
+      cards = [...container.querySelectorAll('.option-card')];
+      card = cards[draggingOption.idx];
+      applyDragVisual(card, dy);
+    } else break;
+  }
+}
+
+// Swaps two adjacent options in the data model, re-renders the list and canvas so
+// output pins / connection curves follow the new order, and FLIP-animates the
+// displaced neighbor sliding into its new slot.
+function swapOptions(i, j) {
+  const container = document.getElementById('options-container');
+  const neighborFirstRect = container.querySelectorAll('.option-card')[j].getBoundingClientRect();
+
+  const opts = events[selectedIdx].options;
+  [opts[i], opts[j]] = [opts[j], opts[i]];
+
+  renderOptions();  // rebuild the list to reflect the new order
+  renderCanvas();   // node cards + canvas connections follow the new option order
+  generateCode();
+
+  const neighborNew = container.querySelectorAll('.option-card')[i];
+  if (neighborNew) {
+    const neighborLastRect = neighborNew.getBoundingClientRect();
+    const dyShift = neighborFirstRect.top - neighborLastRect.top;
+    neighborNew.style.transition = 'none';
+    neighborNew.style.transform = `translateY(${dyShift}px)`;
+    requestAnimationFrame(() => {
+      neighborNew.style.transition = 'transform 0.18s ease';
+      neighborNew.style.transform = '';
+    });
+  }
+}
+
+function onOptionDragEnd() {
+  if (!draggingOption) return;
+  const container = document.getElementById('options-container');
+  const card = container.querySelectorAll('.option-card')[draggingOption.idx];
+  if (card) {
+    card.classList.remove('dragging');
+    card.style.transform = '';
+  }
+  draggingOption = null;
+  document.body.style.userSelect = '';
+  saveState();
 }
 
 function updateOptionData(optIdx, field, value) {
