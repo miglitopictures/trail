@@ -4,19 +4,6 @@
 <meta charset="UTF-8">
 <title>VS | Event Editor</title>
 <link rel="stylesheet" href="./style/style.css">
-<style>
-  .easy-create-ghost {
-    opacity: 0.45;
-    pointer-events: none;
-    border: 1.5px dashed rgba(48, 209, 88, 0.7) !important;
-    box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.15) !important;
-    animation: ghost-pulse 1s ease-in-out infinite alternate;
-  }
-  @keyframes ghost-pulse {
-    from { opacity: 0.35; }
-    to   { opacity: 0.6;  }
-  }
-</style>
 </head>
 <body>
 
@@ -812,28 +799,10 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
   const clickX = (e.clientX - containerRect.left - panX) / zoom;
   const clickY = (e.clientY - containerRect.top  - panY) / zoom;
 
-  // Find the nearest node within 300px (canvas units)
-  const SNAP_RADIUS = 300;
-  let nearestIdx = null, nearestDist = Infinity;
-  events.forEach((ev, i) => {
-    const cx = ev.x + 125, cy = ev.y + 90; // approximate node centre
-    const d = Math.hypot(clickX - cx, clickY - cy);
-    if (d < SNAP_RADIUS && d < nearestDist) { nearestDist = d; nearestIdx = i; }
-  });
-
   const newX = snapToGrid(clickX - 125);
   const newY = snapToGrid(clickY - 60);
   const newIdx = events.length;
-  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
-
-  // If a nearby node exists AND it still has room for another option (< 4), wire it
-  if (nearestIdx !== null) {
-    const src = events[nearestIdx];
-    if (!src.options) src.options = [];
-    if (src.options.length < 4) {
-      src.options.push({ message: 'Option', nextId: newIdx, routers: [] });
-    }
-  }
+  events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
 
   renderCanvas();
   selectEvent(newIdx);

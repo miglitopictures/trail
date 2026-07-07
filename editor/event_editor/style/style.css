@@ -481,3 +481,15 @@ pre {
   display: none;
   border-radius: var(--radius-sm);
 }
+
+.easy-create-ghost {
+    opacity: 0.45;
+    pointer-events: none;
+    border: 1.5px dashed rgba(48, 209, 88, 0.7) !important;
+    box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.15) !important;
+    animation: ghost-pulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes ghost-pulse {
+    from { opacity: 0.35; }
+    to   { opacity: 0.6;  }
+  }
