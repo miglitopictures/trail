@@ -1611,7 +1611,7 @@ function renderOptions() {
 }
 
 // ── OPTION REORDERING (drag handle in the Properties Panel) ──
-let draggingOption = null; // { idx, startClientY }
+let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom } }
 
 function applyDragVisual(card, dy) {
   card.classList.add('dragging');
@@ -1624,7 +1624,14 @@ function onOptionDragStart(e, idx) {
   const container = document.getElementById('options-container');
   const card = container.querySelectorAll('.option-card')[idx];
   if (!card) return;
-  draggingOption = { idx, startClientY: e.clientY };
+  // Keep the dragged card from visually leaving the "Options Layout Config Matrix" section —
+  // clamp its travel to the bounds of the enclosing field-group (label + list + add button).
+  const fieldGroup = container.closest('.field-group') || container;
+  draggingOption = {
+    idx,
+    startClientY: e.clientY,
+    bounds: { minTop: fieldGroup.offsetTop, maxBottom: fieldGroup.offsetTop + fieldGroup.offsetHeight }
+  };
   card.classList.add('dragging');
   document.body.style.userSelect = 'none';
 }
@@ -1636,31 +1643,45 @@ function onOptionDragMove(e) {
   let card = cards[draggingOption.idx];
   if (!card) return;
 
-  const dy = e.clientY - draggingOption.startClientY;
-  card.style.transform = `translateY(${dy}px)`;
+  let dy = e.clientY - draggingOption.startClientY;
 
-  // Bubble the dragged card past earlier siblings once the pointer crosses their midpoint
+  // Bubble the dragged card past earlier siblings once the pointer crosses their midpoint.
+  // Each swap shifts the card's resting slot by roughly one card-height, so we nudge the
+  // anchor (startClientY) by that same shift — otherwise dy stays unchanged across the swap
+  // while the rest position jumps, and the card visually leaps away from the cursor.
   while (draggingOption.idx > 0) {
     const prevRect = cards[draggingOption.idx - 1].getBoundingClientRect();
     if (e.clientY < prevRect.top + prevRect.height / 2) {
+      const restBefore = card.offsetTop;
       swapOptions(draggingOption.idx, draggingOption.idx - 1);
       draggingOption.idx--;
       cards = [...container.querySelectorAll('.option-card')];
       card = cards[draggingOption.idx];
-      applyDragVisual(card, dy);
+      draggingOption.startClientY += (card.offsetTop - restBefore);
+      dy = e.clientY - draggingOption.startClientY;
     } else break;
   }
   // Bubble the dragged card past later siblings once the pointer crosses their midpoint
   while (draggingOption.idx < cards.length - 1) {
     const nextRect = cards[draggingOption.idx + 1].getBoundingClientRect();
     if (e.clientY > nextRect.top + nextRect.height / 2) {
+      const restBefore = card.offsetTop;
       swapOptions(draggingOption.idx, draggingOption.idx + 1);
       draggingOption.idx++;
       cards = [...container.querySelectorAll('.option-card')];
       card = cards[draggingOption.idx];
-      applyDragVisual(card, dy);
+      draggingOption.startClientY += (card.offsetTop - restBefore);
+      dy = e.clientY - draggingOption.startClientY;
     } else break;
   }
+
+  // Clamp so the card can never render outside the Options section, however far the mouse strays
+  const { minTop, maxBottom } = draggingOption.bounds;
+  const minDy = minTop - card.offsetTop;
+  const maxDy = maxBottom - (card.offsetTop + card.offsetHeight);
+  dy = Math.max(minDy, Math.min(maxDy, dy));
+
+  applyDragVisual(card, dy);
 }
 
 // Swaps two adjacent options in the data model, re-renders the list and canvas so
