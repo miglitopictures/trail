@@ -39,11 +39,16 @@ int updateTimer(Timer *timer, double deltaTime){
 }
 
 enum State {
+    STATE_START,
+    STATE_MENU,
+
     STATE_PLAYING,
     STATE_STOP,
     STATE_STOP_CHECKPOINT, //TODO: talvez mudar o nome para STATE_CHECKPOINT
     STATE_EVENT,
-    STATE_GAMEOVER
+
+    STATE_GAMEOVER,
+    STATE_WIN
 };
 
 typedef struct {
@@ -62,12 +67,12 @@ typedef struct {
     int footwear;
 } Inventory;
 
-int buy(int *shopIten, int *partyIten, int price, int *wallet){
+int buy(int *sellerIten, int *buyerIten, int price, int *wallet){
     if (*wallet < price) return 0; // not enough money
     // make trasaction
     *wallet -= price;
-    *shopIten  -= 1;
-    *partyIten += 1;
+    *sellerIten  -= 1;
+    *buyerIten += 1;
     return 1;
 }
 
@@ -97,6 +102,14 @@ void rest(Party *party, int *hours){
     *hours += 1;
 }
 
+// Event condition flags
+#define COND_NONE          (0)       // 00000000 00000000 00000000 00000000
+// #define COND_NEEDS_SICK    (1 << 0)  // 00000000 00000000 00000000 00000001
+// #define COND_LOW_FOOD      (1 << 1)  // 00000000 00000000 00000000 00000010
+// #define COND_NO_MONEY      (1 << 2)  // 00000000 00000000 00000000 00000100
+// #define COND_NIGHT_TIME    (1 << 3)  // 00000000 00000000 00000000 00001000
+// #define COND_IN_DESERT     (1 << 4)  // 00000000 00000000 00000000 00010000
+
 enum EventType {
     EVENT_MESSAGE,
     EVENT_DETOUR,
@@ -112,14 +125,28 @@ typedef struct {
 struct Event {
     char message[256];
     enum EventType type;
+
+    // distance range for event
+    float minDistance;      // Won't trigger before this kilometer mark
+    float maxDistance;      // Won't trigger after this kilometer mark
+    // conditional flags
+    unsigned int requiredFlags;
+    unsigned int forbiddenFlags;
+
+    int weight;
+
     int numOptions;
     Option options[4];
 };
 
-Event createEvent(char *message, enum EventType type){
+Event createEvent(char *message, enum EventType type, float minDistance, float maxDistance, unsigned int requiredFlags, unsigned int forbiddenFlags){
     Event event = {0};
     strcpy(event.message, message);
     event.type = type;
+    event.minDistance = minDistance;
+    event.maxDistance = maxDistance;
+    event.requiredFlags = requiredFlags;
+    event.forbiddenFlags = forbiddenFlags;
     event.numOptions = 0;
     return event;
 };
@@ -164,6 +191,7 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory
 }
 
 typedef struct {
+    int weather;
     int hours;
     float distance;
     enum State state;
@@ -183,27 +211,27 @@ int main() {
 
     // creating event list
     // type message
-    events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE);
-    events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE);
-    events[2] = createEvent("Um rio seco.", EVENT_MESSAGE);
-    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE);
-    events[4] = createEvent("Longo dia...", EVENT_MESSAGE);
-    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE);
-    events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE);
-    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE);
-    events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE);
+    events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[4] = createEvent("Longo dia...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     // type detour
-    events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR);
-    events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR);
+    events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+    events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
     // eventEmptyHouse
     #define EMPTY_HOUSE       11
     #define EMPTY_HOUSE_ENTER 12
 
-    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE);
+    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     addOption(&events[EMPTY_HOUSE], "Enter", EMPTY_HOUSE_ENTER);
     addOption(&events[EMPTY_HOUSE], "Go Away", -1);
 
-    events[EMPTY_HOUSE_ENTER] = createEvent("Nothing inside...", EVENT_MESSAGE);
+    events[EMPTY_HOUSE_ENTER] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
 
     // eventFoundStranger
     #define FOUND_STRANGER       13
@@ -211,19 +239,19 @@ int main() {
     #define STRANGER_SHORTCUT    15
     #define STRANGER_WRONG_ROAD  16
 
-    events[FOUND_STRANGER]      = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE);
+    events[FOUND_STRANGER]      = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     addOption(&events[FOUND_STRANGER], "Talk",     STRANGER_TALK);
     addOption(&events[FOUND_STRANGER], "Go Away",  -1);
     
-    events[STRANGER_TALK]       = createEvent("Estão indo para o litoral?", EVENT_MESSAGE);
+    events[STRANGER_TALK]       = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     addOption(&events[STRANGER_TALK], "Sim",           STRANGER_SHORTCUT);
     addOption(&events[STRANGER_TALK], "Não responder", -1);
 
-    events[STRANGER_SHORTCUT]   = createEvent("Conheço um atalho!", EVENT_MESSAGE);
+    events[STRANGER_SHORTCUT]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     addOption(&events[STRANGER_SHORTCUT], "Seguir",         9);
     addOption(&events[STRANGER_SHORTCUT], "Deixar pra lá", -1);
     
-    events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR);
+    events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
 
     // setup gameplay data
     GameData game = {0};
