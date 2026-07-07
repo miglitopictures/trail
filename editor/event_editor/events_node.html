@@ -34,6 +34,11 @@
       <rect x="10.3" y="2.5" width="4.2" height="11" rx="0" fill="currentColor" opacity="0.18"/>
     </svg>
   </button>
+  <button class="canvas-preview-btn" id="canvas-preview-btn" onclick="openEventPreview()" title="Preview selected event">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M4.5 3.2v9.6c0 .7.77 1.13 1.36.76l7.4-4.8a.9.9 0 0 0 0-1.52l-7.4-4.8A.9.9 0 0 0 4.5 3.2Z" fill="currentColor"/>
+    </svg>
+  </button>
   <div class="canvas-actions">
     <button class="canvas-btn canvas-btn-primary" onclick="newEvent()" title="Add Story Node">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="7" y="2" width="2" height="12" rx="1" fill="currentColor"/><rect x="2" y="7" width="12" height="2" rx="1" fill="currentColor"/></svg>
@@ -1631,6 +1636,7 @@ function renderForm() {
   if (selectedIdx === null) {
     document.getElementById('empty-state').style.display = 'flex';
     document.getElementById('event-form').style.display = 'none';
+    updateCanvasPreviewButton();
     return;
   }
   document.getElementById('empty-state').style.display = 'none';
@@ -1700,6 +1706,7 @@ function renderOptions() {
   });
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
   document.getElementById('preview-event-btn').style.display = ev.options.length > 0 ? 'inline-flex' : 'none';
+  updateCanvasPreviewButton();
 }
 
 function updateOptionData(optIdx, field, value) {
@@ -2069,6 +2076,19 @@ function setPanelCollapsed(collapsed) {
   toggleBtn.title = collapsed ? 'Open panel' : 'Close panel';
   reopenBtn.title = 'Expand panel';
   localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0');
+  updateCanvasPreviewButton();
+}
+
+// Shows the floating "preview selected event" button over the canvas only when
+// BOTH are true: the right panel is collapsed (so the in-panel Preview Event
+// button isn't reachable) AND the selected event actually has options to
+// preview. Called whenever either condition could have changed.
+function updateCanvasPreviewButton() {
+  const btn = document.getElementById('canvas-preview-btn');
+  const collapsed = document.body.classList.contains('panel-collapsed');
+  const ev = selectedIdx !== null ? events[selectedIdx] : null;
+  const hasOptions = !!(ev && ev.options && ev.options.length > 0);
+  btn.classList.toggle('visible', collapsed && hasOptions);
 }
 
 function toggleRightPanel() {
