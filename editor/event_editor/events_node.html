@@ -29,8 +29,10 @@
     <button class="btn" onclick="fitToScreen()">Fit to Screen</button>
     <button class="btn" onclick="resetZoom()">100%</button>
     <button class="btn btn-danger" onclick="resetHistory()">Reset Board</button>
+    <button class="btn" onclick="tidyUp()" title="Auto-arrange nodes into a clean left-to-right DAG layout">✦ Tidy Up</button>
+    <button class="btn" id="grid-snap-btn" onclick="toggleGridSnap()" title="Snap nodes to grid while dragging">⊞ Grid Off</button>
     <span id="zoom-badge" style="font-size:11px; color: var(--muted); min-width:36px; text-align:center;">100%</span>
-    <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+click line for router · scroll to zoom</span>
+    <span style="font-size:11px; color: var(--muted);">Shift+drag to select · Ctrl+G to group · Ctrl+D to duplicate · Ctrl+click line for router · scroll to zoom</span>
   </div>
 </div>
 
@@ -121,6 +123,10 @@ let draggingGroupId = null, groupDragOffsets = [];
 let groupRouterOffsets = [];
 let multiRouterOffsets = [];
 
+// Grid snapping
+let gridSnapEnabled = false;
+const GRID_SIZE = 20;
+
 // ── HISTORY MANAGEMENT (UNDO) ──
 const MAX_HISTORY = 128; // Keeps up to 20 states
 let historyStack = [];
@@ -192,6 +198,10 @@ function resetHistory() {
 }
 
 // ── UTILITY ──
+function snapToGrid(v) {
+  return gridSnapEnabled ? Math.round(v / GRID_SIZE) * GRID_SIZE : v;
+}
+
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
 }
@@ -773,6 +783,47 @@ document.getElementById('canvas-container').addEventListener('wheel', (e) => {
   updateCanvasTransform();
 }, { passive: false });
 
+// ── DOUBLE-CLICK QUICK-CONNECT ──
+// Double-click on empty canvas near a node → create new node and wire it from the closest node
+document.getElementById('canvas-container').addEventListener('dblclick', (e) => {
+  // Only fire on the canvas background (not on a node or button)
+  const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
+  if (!onBg) return;
+  e.stopPropagation();
+
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+  const clickX = (e.clientX - containerRect.left - panX) / zoom;
+  const clickY = (e.clientY - containerRect.top  - panY) / zoom;
+
+  // Find the nearest node within 300px (canvas units)
+  const SNAP_RADIUS = 300;
+  let nearestIdx = null, nearestDist = Infinity;
+  events.forEach((ev, i) => {
+    const cx = ev.x + 125, cy = ev.y + 90; // approximate node centre
+    const d = Math.hypot(clickX - cx, clickY - cy);
+    if (d < SNAP_RADIUS && d < nearestDist) { nearestDist = d; nearestIdx = i; }
+  });
+
+  const newX = snapToGrid(clickX - 125);
+  const newY = snapToGrid(clickY - 60);
+  const newIdx = events.length;
+  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+
+  // If a nearby node exists AND it still has room for another option (< 4), wire it
+  if (nearestIdx !== null) {
+    const src = events[nearestIdx];
+    if (!src.options) src.options = [];
+    if (src.options.length < 4) {
+      src.options.push({ message: 'Option', nextId: newIdx, routers: [] });
+    }
+  }
+
+  renderCanvas();
+  selectEvent(newIdx);
+  generateCode();
+  saveState();
+});
+
 function onCanvasMouseDown(e) {
   const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
   if (!onBg) return;
@@ -905,6 +956,13 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
+  // Ctrl+D — duplicate selected node(s)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    duplicateSelected();
+    return;
+  }
+
   // Ctrl+G — group selected nodes
   if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
     e.preventDefault();
@@ -1019,8 +1077,8 @@ window.onmousemove = (e) => {
     updateCanvasTransform();
   } else if (draggingGroupId !== null) {
     groupDragOffsets.forEach(({ idx, ox, oy }) => {
-      events[idx].x = e.clientX / zoom - ox;
-      events[idx].y = e.clientY / zoom - oy;
+      events[idx].x = snapToGrid(e.clientX / zoom - ox);
+      events[idx].y = snapToGrid(e.clientY / zoom - oy);
       const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
       if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
     });
@@ -1038,8 +1096,8 @@ window.onmousemove = (e) => {
     drawConnections();
   } else if (draggingMulti) {
     multiDragOffsets.forEach(({ idx, ox, oy }) => {
-      events[idx].x = e.clientX / zoom - ox;
-      events[idx].y = e.clientY / zoom - oy;
+      events[idx].x = snapToGrid(e.clientX / zoom - ox);
+      events[idx].y = snapToGrid(e.clientY / zoom - oy);
       const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
       if (nodeEl) { nodeEl.style.left = `${events[idx].x}px`; nodeEl.style.top = `${events[idx].y}px`; }
     });
@@ -1049,15 +1107,15 @@ window.onmousemove = (e) => {
     const { nodeIdx, optionIdx, routerIdx, offsetX, offsetY } = draggingRouter;
     const opt = events[nodeIdx].options[optionIdx];
     if (opt && opt.routers && opt.routers[routerIdx]) {
-      opt.routers[routerIdx].x = e.clientX / zoom - offsetX;
-      opt.routers[routerIdx].y = e.clientY / zoom - offsetY;
+      opt.routers[routerIdx].x = snapToGrid(e.clientX / zoom - offsetX);
+      opt.routers[routerIdx].y = snapToGrid(e.clientY / zoom - offsetY);
       const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
       if (rdiv) { rdiv.style.left = `${opt.routers[routerIdx].x}px`; rdiv.style.top = `${opt.routers[routerIdx].y}px`; }
       drawConnections();
     }
   } else if (draggingNodeIdx !== null) {
-    events[draggingNodeIdx].x = e.clientX / zoom - dragOffsetX;
-    events[draggingNodeIdx].y = e.clientY / zoom - dragOffsetY;
+    events[draggingNodeIdx].x = snapToGrid(e.clientX / zoom - dragOffsetX);
+    events[draggingNodeIdx].y = snapToGrid(e.clientY / zoom - dragOffsetY);
     const nodeEl = document.querySelector(`.node[data-idx="${draggingNodeIdx}"]`);
     if (nodeEl) { nodeEl.style.left = `${events[draggingNodeIdx].x}px`; nodeEl.style.top = `${events[draggingNodeIdx].y}px`; }
     renderGroups();
@@ -1263,6 +1321,84 @@ function onFieldChange() {
   document.getElementById('char-count').textContent = ev.message.length;
   renderCanvas(); generateCode();
   saveState();
+}
+
+// ── DUPLICATE (Ctrl+D) ──
+function duplicateSelected() {
+  const OFFSET = 40;
+  const indicesToDupe = selectedIndices.size > 0
+    ? [...selectedIndices]
+    : (selectedIdx !== null ? [selectedIdx] : []);
+  if (indicesToDupe.length === 0) return;
+
+  // Map old index → new index for re-linking within the duplicated set
+  const indexMap = {};
+  indicesToDupe.forEach((oldIdx, pos) => {
+    indexMap[oldIdx] = events.length + pos;
+  });
+
+  const newIndices = [];
+  indicesToDupe.forEach(oldIdx => {
+    const orig = events[oldIdx];
+    const clone = JSON.parse(JSON.stringify(orig));
+    clone.x = snapToGrid(orig.x + OFFSET);
+    clone.y = snapToGrid(orig.y + OFFSET);
+    // Remap options that point within the duplicated set; leave external links intact
+    clone.options = clone.options.map(opt => ({
+      ...opt,
+      nextId: (opt.nextId in indexMap) ? indexMap[opt.nextId] : opt.nextId,
+      routers: []
+    }));
+    newIndices.push(events.length);
+    events.push(clone);
+  });
+
+  // Select the new clones
+  selectedIndices.clear();
+  newIndices.forEach(i => selectedIndices.add(i));
+  selectedIdx = null;
+  renderCanvas(); renderForm(); generateCode();
+  saveState();
+}
+
+// ── TIDY UP (left-to-right DAG layout) ──
+// ── TIDY UP (Snap all elements to grid) ──
+function tidyUp() {
+  if (events.length === 0) return;
+
+  const snapAlways = v => Math.round(v / GRID_SIZE) * GRID_SIZE;
+
+  events.forEach((ev, i) => {
+    // Snap node coordinates
+    ev.x = snapAlways(ev.x);
+    ev.y = snapAlways(ev.y);
+
+    // Snap all router coordinates for this node's connections
+    if (ev.options) {
+      ev.options.forEach(opt => {
+        if (opt.routers) {
+          opt.routers.forEach(router => {
+            router.x = snapAlways(router.x);
+            router.y = snapAlways(router.y);
+          });
+        }
+      });
+    }
+  });
+
+  renderCanvas(); 
+  generateCode(); 
+  saveState();
+}
+
+// ── GRID SNAP TOGGLE ──
+function toggleGridSnap() {
+  gridSnapEnabled = !gridSnapEnabled;
+  const btn = document.getElementById('grid-snap-btn');
+  if (btn) {
+    btn.classList.toggle('btn-primary', gridSnapEnabled);
+    btn.textContent = gridSnapEnabled ? '⊞ Grid On' : '⊞ Grid Off';
+  }
 }
 
 function newEvent() {
