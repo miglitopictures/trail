@@ -1960,26 +1960,47 @@ function generateCode() {
   const lines = [];
   lines.push(`Event events[${events.length}] = {0};`);
   lines.push('');
-  
+
+  // 2. Emit one #define per named event, up front. A #define must appear before
+  // any use in C, and events can link both forward and backward across the
+  // graph, so collecting them all here (rather than scattering them next to
+  // each chain) guarantees the generated code always compiles no matter how
+  // the graph is wired.
+  const namedEvents = events
+    .map((ev, i) => ({ ev, i }))
+    .filter(({ ev }) => !!ev.define);
+  if (namedEvents.length > 0) {
+    const maxNameLen = Math.max(...namedEvents.map(({ ev }) => ev.define.length));
+    namedEvents.forEach(({ ev, i }) => {
+      lines.push(`#define ${ev.define.padEnd(maxNameLen)} ${i}`);
+    });
+    lines.push('');
+  }
+
+  // 3. How a given event index should be *referenced* in generated code —
+  // its #define name if it has one, otherwise the plain numeric index.
+  const ref = (idx) => (idx >= 0 && idx < events.length && events[idx].define) ? events[idx].define : idx;
+
   events.forEach((ev, i) => {
     const comment = ev.define ? `/* ${ev.define} */` : `/* [${i}] */`;
     const hasOutgoing = ev.options && ev.options.length > 0;
 
-    // 2. A node starts a chain if it has NO incoming links AND AT LEAST 1 outgoing link
+    // 4. A node starts a chain if it has NO incoming links AND AT LEAST 1 outgoing link
     if (incomingCounts[i] === 0 && hasOutgoing) {
       lines.push(`// ---${ev.define ? ev.define : "CHAIN START"}---`);
     }
 
     // Existing generation logic
-    lines.push(`events[${i}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
-    
+    lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
+
     (ev.options || []).forEach(opt => {
-      lines.push(`addOption(&events[${i}], "${escapeCStr(opt.message)}", ${opt.nextId});`);
+      const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
+      lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
     });
-    
+
     if (hasOutgoing) lines.push('');
   });
-  
+
   document.getElementById('code-output').textContent = lines.join('\n');
 }
 
