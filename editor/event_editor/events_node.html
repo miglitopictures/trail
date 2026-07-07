@@ -798,7 +798,7 @@ function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
   });
 
   if (cutCount > 0) {
-    drawConnections();
+    renderCanvas(); // rebuilds node cards too, so output pins and option labels drop their stale "connected" state
     generateCode();
     saveState();
   }
