@@ -42,8 +42,8 @@
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="3" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="13" r="1.2" fill="currentColor" opacity="0.4"/></svg>
     </button>
     <div class="canvas-btn-divider"></div>
-    <button class="canvas-btn canvas-btn-danger" onclick="resetHistory()" title="Reset Board — clears all nodes and history">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <button class="canvas-btn" onclick="openHelp()" title="Help & Shortcuts">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.2C6.2 5.1 7 4.4 8 4.4s1.8.7 1.8 1.6c0 .8-.5 1.3-1.1 1.7C8.1 8.1 7.8 8.5 7.8 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7.8" cy="11" r="0.8" fill="currentColor"/></svg>
     </button>
     <span id="zoom-badge" class="canvas-zoom-badge">100%</span>
   </div>
@@ -90,6 +90,59 @@
 </div>
 
 <div class="copied-toast" id="toast">C Setup Logic arrays compiled and captured successfully!</div>
+
+<!-- Help Modal -->
+<div id="help-overlay" class="help-overlay" onclick="closeHelp(event)">
+  <div class="help-modal">
+    <div class="help-header">
+      <span class="help-title">Help & Shortcuts</span>
+      <button class="help-close" onclick="closeHelp()">&times;</button>
+    </div>
+    <div class="help-body">
+
+      <div class="help-section-label">Navigation</div>
+      <div class="help-grid">
+        <div class="help-row"><kbd>Drag canvas</kbd><span>Pan the workspace</span></div>
+        <div class="help-row"><kbd>Scroll</kbd><span>Zoom in / out</span></div>
+        <div class="help-row"><kbd>F</kbd><span>Fit all nodes to screen</span></div>
+        <div class="help-row"><kbd>Ctrl +</kbd><span>Zoom in</span></div>
+        <div class="help-row"><kbd>Ctrl −</kbd><span>Zoom out</span></div>
+        <div class="help-row"><kbd>Ctrl 0</kbd><span>Reset zoom to 100%</span></div>
+      </div>
+
+      <div class="help-section-label">Nodes</div>
+      <div class="help-grid">
+        <div class="help-row"><kbd>Double-click canvas</kbd><span>Create a new blank node</span></div>
+        <div class="help-row"><kbd>Drag handle → canvas</kbd><span>Create node and connect</span></div>
+        <div class="help-row"><kbd>Drag handle → node</kbd><span>Connect to existing node</span></div>
+        <div class="help-row"><kbd>Ctrl D</kbd><span>Duplicate selected node(s)</span></div>
+        <div class="help-row"><kbd>Delete / Backspace</kbd><span>Delete selected node or link</span></div>
+        <div class="help-row"><kbd>Ctrl Z</kbd><span>Undo</span></div>
+      </div>
+
+      <div class="help-section-label">Selection</div>
+      <div class="help-grid">
+        <div class="help-row"><kbd>Shift + drag</kbd><span>Marquee / box select</span></div>
+        <div class="help-row"><kbd>Shift + click node</kbd><span>Add to selection</span></div>
+        <div class="help-row"><kbd>Ctrl G</kbd><span>Group selected nodes</span></div>
+      </div>
+
+      <div class="help-section-label">Connections</div>
+      <div class="help-grid">
+        <div class="help-row"><kbd>Ctrl + click line</kbd><span>Add a router waypoint</span></div>
+        <div class="help-row"><kbd>Click line</kbd><span>Select connection</span></div>
+        <div class="help-row"><kbd>Delete</kbd><span>Remove selected connection</span></div>
+      </div>
+
+      <div class="help-section-label help-section-label-danger">Danger Zone</div>
+      <div class="help-danger-zone">
+        <span>Permanently clears the board and all undo history.</span>
+        <button class="btn btn-danger btn-sm" onclick="confirmResetBoard()">Reset Board</button>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <script>
 const EVENT_TYPES = {
@@ -212,6 +265,20 @@ function resetHistory() {
         // 2. Refresh the page to load the default hardcoded seed
         location.reload(); 
     }
+}
+
+// ── HELP MODAL ──
+function openHelp() {
+  document.getElementById('help-overlay').classList.add('open');
+}
+function closeHelp(e) {
+  if (!e || e.target === document.getElementById('help-overlay') || e.currentTarget.classList.contains('help-close')) {
+    document.getElementById('help-overlay').classList.remove('open');
+  }
+}
+function confirmResetBoard() {
+  closeHelp();
+  setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
 }
 
 // ── UTILITY ──
@@ -918,6 +985,11 @@ window.addEventListener('keydown', (e) => {
   }
 
   // F — fit all nodes to screen
+  if (e.key === '?') {
+    openHelp();
+    return;
+  }
+
   if (e.key === 'f' || e.key === 'F') {
     e.preventDefault();
     fitToScreen();
@@ -972,6 +1044,11 @@ window.addEventListener('keydown', (e) => {
       selectEvent(null);
       saveState();
     }
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    document.getElementById('help-overlay').classList.remove('open');
     return;
   }
 
@@ -1320,6 +1397,13 @@ function renderOptions() {
   ev.options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'option-card';
+    const optionsHtml = events.map((targetEv, targetIdx) => {
+      if (targetIdx === selectedIdx) return '';
+      const label = targetEv.define
+        ? `[${targetIdx}] ${targetEv.define}`
+        : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
+      return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
+    }).join('');
     card.innerHTML = `
       <div class="option-card-header">
         <span class="option-num">${i + 1}</span>
@@ -1330,11 +1414,7 @@ function renderOptions() {
         <span style="font-size:11.5px; color:var(--muted)">Target:</span>
         <select onchange="updateOptionData(${i}, 'nextId', parseInt(this.value))" style="padding: 6px; font-size: 12.5px; flex: 1;">
           <option value="-1" ${opt.nextId === -1 ? 'selected' : ''}>— Terminal Leaf Node</option>
-          ${events.map((targetEv, targetIdx) => {
-            if (targetIdx === selectedIdx) return '';
-            const label = targetEv.define ? `[${targetIdx}] ${targetEv.define}` : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
-            return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
-          }).join('')}
+          ${optionsHtml}
         </select>
       </div>
     `;
@@ -1441,8 +1521,8 @@ function toggleGridSnap() {
   gridSnapEnabled = !gridSnapEnabled;
   const btn = document.getElementById('grid-snap-btn');
   if (btn) {
-    btn.classList.toggle('canvas-btn-active', gridSnapEnabled);
-    btn.title = gridSnapEnabled ? 'Grid Snap: On' : 'Toggle Grid Snap';
+    btn.classList.toggle('btn-primary', gridSnapEnabled);
+    btn.textContent = gridSnapEnabled ? '⊞ Grid On' : '⊞ Grid Off';
   }
 }
 
