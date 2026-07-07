@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <title>VS | Event Editor</title>
 <link rel="stylesheet" href="./style/style.css">
+<style>
+  .easy-create-ghost {
+    opacity: 0.45;
+    pointer-events: none;
+    border: 1.5px dashed rgba(48, 209, 88, 0.7) !important;
+    box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.15) !important;
+    animation: ghost-pulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes ghost-pulse {
+    from { opacity: 0.35; }
+    to   { opacity: 0.6;  }
+  }
+</style>
 </head>
 <body>
 
@@ -114,6 +127,10 @@ let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
 let activeLinkDrag = null;
 let draggingRouter = null;
+
+// Easy-create: ghost node preview when dragging a connection to empty canvas
+const EASY_CREATE_THRESHOLD = 30; // px in canvas units before ghost appears
+let easyCreateGhost = null; // DOM element for the ghost preview
 
 // Marquee selection
 let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
@@ -1138,6 +1155,28 @@ window.onmousemove = (e) => {
       const targetAnc = document.querySelector(`.node[data-idx="${hoveredIdx}"] .node-input-anchor`);
       if (targetAnc) targetAnc.classList.add('drag-over');
     }
+
+    // Easy-create ghost: show a ghost node preview when dragging over empty canvas past threshold
+    const dragDist = Math.hypot(
+      activeLinkDrag.currentX - activeLinkDrag.startX,
+      activeLinkDrag.currentY - activeLinkDrag.startY
+    );
+    const showGhost = hoveredIdx === null && dragDist > EASY_CREATE_THRESHOLD;
+    if (showGhost) {
+      const ghostX = activeLinkDrag.currentX;
+      const ghostY = activeLinkDrag.currentY - 25;
+      if (!easyCreateGhost) {
+        easyCreateGhost = document.createElement('div');
+        easyCreateGhost.className = 'node easy-create-ghost';
+        easyCreateGhost.innerHTML = `<div class="node-input-anchor"></div><div class="node-header"><span class="node-idx">new</span><span class="node-title">New Node</span></div><div class="node-body" style="color:var(--muted);font-style:italic;">Drop to create</div>`;
+        document.getElementById('nodes-layer').appendChild(easyCreateGhost);
+      }
+      easyCreateGhost.style.left = `${ghostX}px`;
+      easyCreateGhost.style.top  = `${ghostY}px`;
+    } else {
+      if (easyCreateGhost) { easyCreateGhost.remove(); easyCreateGhost = null; }
+    }
+
     drawConnections();
   }
 };
@@ -1161,6 +1200,10 @@ window.onmouseup = (e) => {
   draggingGroupId = null;
 
   if (activeLinkDrag) {
+    // Clean up ghost node preview
+    if (easyCreateGhost) { easyCreateGhost.remove(); easyCreateGhost = null; }
+    document.querySelectorAll('.node-input-anchor').forEach(anc => anc.classList.remove('drag-over'));
+
     let hoveredIdx = null;
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     for (let el of elements) {
@@ -1170,12 +1213,32 @@ window.onmouseup = (e) => {
         if (idx !== activeLinkDrag.fromNodeIdx) { hoveredIdx = idx; break; }
       }
     }
-    events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = (hoveredIdx !== null) ? hoveredIdx : -1;
-    events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
-    activeLinkDrag = null;
-    renderCanvas();
-    renderForm();
-    generateCode();
+
+    const dragDist = Math.hypot(
+      activeLinkDrag.currentX - activeLinkDrag.startX,
+      activeLinkDrag.currentY - activeLinkDrag.startY
+    );
+
+    if (hoveredIdx === null && dragDist > EASY_CREATE_THRESHOLD) {
+      // Easy-create: spawn a new blank node at drop position and wire it
+      const newX = snapToGrid(activeLinkDrag.currentX);
+      const newY = snapToGrid(activeLinkDrag.currentY - 25);
+      const newIdx = events.length;
+      events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = newIdx;
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
+      activeLinkDrag = null;
+      renderCanvas();
+      selectEvent(newIdx);
+      generateCode();
+    } else {
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = (hoveredIdx !== null) ? hoveredIdx : -1;
+      events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
+      activeLinkDrag = null;
+      renderCanvas();
+      renderForm();
+      generateCode();
+    }
   }
 
   // Save state if items were moved or linked
