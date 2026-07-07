@@ -90,7 +90,10 @@
         <div class="type-selector" id="type-selector-container"></div>
       </div>
       <div class="field-group">
-        <div class="field-label">Options Layout Config Matrix</div>
+        <div class="field-label-row">
+          <div class="field-label">Options Layout Config Matrix</div>
+          <button class="btn btn-sm btn-primary" id="preview-event-btn" onclick="openEventPreview()" style="display:none;">▶ Preview Event</button>
+        </div>
         <div id="options-container"></div>
         <button class="btn btn-sm" id="add-option-btn" onclick="addOption()" style="margin-top: 4px;">+ Insert Option Branch Pathway</button>
       </div>
@@ -163,6 +166,28 @@
   </div>
 </div>
 
+<!-- Event Preview Modal — mocks the in-game STATE_EVENT screen from main.c -->
+<div id="event-preview-overlay" class="help-overlay" onclick="closeEventPreview(event)">
+  <div class="help-modal preview-modal">
+    <div class="help-header">
+      <span class="help-title">Event Preview</span>
+      <div class="preview-header-actions">
+        <button class="btn btn-sm" id="preview-back-btn" onclick="previewGoBack()" style="display:none;">← Back</button>
+        <button class="btn btn-sm" id="preview-restart-btn" onclick="previewRestart()" style="display:none;">⟲ Restart</button>
+        <button class="help-close" onclick="closeEventPreview()">&times;</button>
+      </div>
+    </div>
+    <div class="help-body preview-body">
+      <div class="preview-breadcrumb" id="preview-breadcrumb"></div>
+      <div class="preview-screen" id="preview-screen">
+        <div class="preview-message-box" id="preview-message-box"></div>
+        <div class="preview-options-row" id="preview-options-row"></div>
+        <div class="preview-hint" id="preview-hint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // Vidas Secas — Event Editor
 // A visual node-graph editor for authoring the game's branching story events.
@@ -181,11 +206,12 @@
 //   8. Knife tool (cut connections by drawing a line across them)
 //   9. Canvas input handling (pan, zoom, select, drag, marquee, quick-connect)
 //   10. Properties panel (right sidebar form for the selected event)
-//   11. Option reordering (drag handle in the Properties Panel)
-//   12. Node actions (duplicate, tidy up, grid snap, create/delete)
-//   13. Right panel tabs & collapse toggle
-//   14. Code generation & file import/export
-//   15. Bootstrap (seed data + initial load)
+//   11. Event preview modal (playtest a branch from the Properties Panel)
+//   12. Option reordering (drag handle in the Properties Panel)
+//   13. Node actions (duplicate, tidy up, grid snap, create/delete)
+//   14. Right panel tabs & collapse toggle
+//   15. Code generation & file import/export
+//   16. Bootstrap (seed data + initial load)
 
 // ══════════════════════════════════════════════════════════════════
 // 1. CONFIG & EVENT-TYPE DEFINITIONS
@@ -1177,6 +1203,19 @@ function onNodeMouseDown(e, idx) {
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
+  // While the Help or Event Preview modal is open, only Escape does anything —
+  // canvas/graph shortcuts (delete, duplicate, group, undo...) stay inert so a
+  // stray keypress can't edit the graph behind the modal.
+  const helpOpen = document.getElementById('help-overlay').classList.contains('open');
+  const previewOpen = document.getElementById('event-preview-overlay').classList.contains('open');
+  if (helpOpen || previewOpen) {
+    if (e.key === 'Escape') {
+      closeHelp();
+      closeEventPreview();
+    }
+    return;
+  }
+
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     undo();
@@ -1243,11 +1282,6 @@ window.addEventListener('keydown', (e) => {
       selectEvent(null);
       saveState();
     }
-    return;
-  }
-
-  if (e.key === 'Escape') {
-    document.getElementById('help-overlay').classList.remove('open');
     return;
   }
 
@@ -1665,6 +1699,7 @@ function renderOptions() {
     container.appendChild(card);
   });
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
+  document.getElementById('preview-event-btn').style.display = ev.options.length > 0 ? 'inline-flex' : 'none';
 }
 
 function updateOptionData(optIdx, field, value) {
@@ -1695,7 +1730,107 @@ function onFieldChange() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 11. OPTION REORDERING (drag handle in the Properties Panel)
+// 11. EVENT PREVIEW MODAL
+// Mocks the in-game STATE_EVENT screen from main.c: a black frame with the
+// event's message in a bordered box, and (if it has options) a row of buttons
+// below it — same idea as MeasureText/DrawRectangleLines/GuiButton there.
+// Clicking an option actually walks the graph like the real game's
+// triggerEvent() would, so this doubles as a quick way to playtest branches
+// without leaving the editor.
+// ══════════════════════════════════════════════════════════════════
+let previewHistory = []; // stack of event indices visited this preview session
+let previewRootIdx = null; // the event the preview was opened on (for Restart)
+
+function openEventPreview() {
+  if (selectedIdx === null || !events[selectedIdx]) return;
+  previewRootIdx = selectedIdx;
+  previewHistory = [];
+  renderEventPreviewScreen(selectedIdx);
+  document.getElementById('event-preview-overlay').classList.add('open');
+}
+
+function closeEventPreview(e) {
+  if (!e || e.target === document.getElementById('event-preview-overlay') || e.currentTarget.classList.contains('help-close')) {
+    document.getElementById('event-preview-overlay').classList.remove('open');
+  }
+}
+
+function previewRestart() {
+  if (previewRootIdx === null) return;
+  previewHistory = [];
+  renderEventPreviewScreen(previewRootIdx);
+}
+
+function previewGoBack() {
+  if (previewHistory.length === 0) return;
+  const prevIdx = previewHistory.pop();
+  renderEventPreviewScreen(prevIdx, { recordHistory: false });
+}
+
+// Renders the mock game screen for events[idx]. Pass recordHistory: false when
+// navigating backward so we don't re-push the node we just came from.
+function renderEventPreviewScreen(idx, { recordHistory = true } = {}) {
+  if (!events[idx]) { closeEventPreview(); return; }
+
+  const ev = events[idx];
+  const cfg = getTypeConfig(ev.type);
+
+  const breadcrumb = document.getElementById('preview-breadcrumb');
+  const label = ev.define ? `[${idx}] ${ev.define}` : `[${idx}] (no define)`;
+  breadcrumb.innerHTML = `Previewing <span class="crumb-current">${escHtml(label)}</span> — ${escHtml(cfg.label)}`;
+
+  const msgBox = document.getElementById('preview-message-box');
+  msgBox.textContent = ev.message || '(Empty Text String)';
+  msgBox.style.borderColor = cfg.fg || '#fff';
+  msgBox.style.color = cfg.fg || '#fff';
+
+  const optsRow = document.getElementById('preview-options-row');
+  optsRow.innerHTML = '';
+  const hint = document.getElementById('preview-hint');
+
+  if (ev.options && ev.options.length > 0) {
+    hint.textContent = '';
+    ev.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'preview-option-btn' + (opt.nextId === -1 ? ' is-terminal' : '');
+      btn.textContent = opt.message || 'Option';
+      btn.title = opt.nextId === -1 ? 'Ends the conversation (Terminal Leaf Node)' : `Links to [${opt.nextId}]`;
+      btn.onclick = () => previewChooseOption(idx, opt.nextId);
+      optsRow.appendChild(btn);
+    });
+  } else {
+    // No options — matches the game's numOptions == 0 case, which just shows
+    // the message and lets the player press Enter to keep moving.
+    hint.textContent = 'Enter to continue';
+  }
+
+  document.getElementById('preview-back-btn').style.display = previewHistory.length > 0 ? 'inline-flex' : 'none';
+  document.getElementById('preview-restart-btn').style.display = idx !== previewRootIdx ? 'inline-flex' : 'none';
+}
+
+function previewChooseOption(fromIdx, nextId) {
+  if (nextId === -1) {
+    // Terminal choice — same as the real game: state returns to gameplay.
+    // We keep the modal open but show an explicit end-of-branch screen,
+    // since silently vanishing would be a confusing way to preview content.
+    previewHistory.push(fromIdx);
+    document.getElementById('preview-breadcrumb').innerHTML = `Previewing <span class="crumb-current">— end of branch —</span>`;
+    document.getElementById('preview-message-box').textContent = '— Conversation ends here —';
+    document.getElementById('preview-message-box').style.borderColor = 'rgba(255,255,255,0.4)';
+    document.getElementById('preview-message-box').style.color = 'rgba(255,255,255,0.6)';
+    document.getElementById('preview-options-row').innerHTML = '';
+    document.getElementById('preview-hint').textContent = '';
+    document.getElementById('preview-back-btn').style.display = 'inline-flex';
+    document.getElementById('preview-restart-btn').style.display = 'inline-flex';
+    return;
+  }
+  if (!events[nextId]) return;
+  previewHistory.push(fromIdx);
+  renderEventPreviewScreen(nextId, { recordHistory: false });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 12. OPTION REORDERING (drag handle in the Properties Panel)
 // An option's nextId/routers travel with it in the array, so reordering is just
 // moving array elements — the canvas connections follow automatically because
 // drawConnections() derives each link's start point from the option's live
@@ -1810,7 +1945,7 @@ function onOptionDragEnd() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 12. NODE ACTIONS (duplicate, tidy up, grid snap, create/delete)
+// 13. NODE ACTIONS (duplicate, tidy up, grid snap, create/delete)
 // ══════════════════════════════════════════════════════════════════
 function duplicateSelected() {
   const OFFSET = 40;
@@ -1918,7 +2053,7 @@ function deleteEvent() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 13. RIGHT PANEL TABS & COLLAPSE TOGGLE
+// 14. RIGHT PANEL TABS & COLLAPSE TOGGLE
 // ══════════════════════════════════════════════════════════════════
 function switchTab(tab) {
   document.getElementById('tab-edit-btn').className = 'tab-btn' + (tab === 'edit' ? ' active' : '');
@@ -1944,7 +2079,7 @@ function toggleRightPanel() {
 setPanelCollapsed(localStorage.getItem('vidas_secas_panel_collapsed') === '1');
 
 // ══════════════════════════════════════════════════════════════════
-// 14. CODE GENERATION & FILE IMPORT/EXPORT
+// 15. CODE GENERATION & FILE IMPORT/EXPORT
 // ══════════════════════════════════════════════════════════════════
 function generateCode() {
   // 1. Calculate incoming links for all events
@@ -2099,7 +2234,7 @@ function copyCode() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 15. BOOTSTRAP — seed data & initial load
+// 16. BOOTSTRAP — seed data & initial load
 // ══════════════════════════════════════════════════════════════════
 const SEED_OX = 3150, SEED_OY = 3710;
 const seed = [
