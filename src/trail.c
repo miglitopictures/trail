@@ -102,6 +102,20 @@ void rest(Party *party, int *hours){
     *hours += 1;
 }
 
+typedef struct {
+    int weather;
+    int hours;
+    float distance;
+
+    enum State state;
+
+    unsigned int activeFlags; // EVENT BITMASK FOR CONDITIONS/STATES
+
+    int currentEvent;
+    int checkpointsVisited;
+    Party party;
+} GameData;
+
 // Event condition flags
 #define COND_NONE          (0)       // 00000000 00000000 00000000 00000000
 // #define COND_NEEDS_SICK    (1 << 0)  // 00000000 00000000 00000000 00000001
@@ -151,7 +165,10 @@ Event createEvent(char *message, enum EventType type, float minDistance, float m
     return event;
 };
 
-Event events[32] = {0};
+#define MAX_EVENTS 128
+#define MAX_RANDOM_EVENTS 32 // Indices 0 to 31 are allowed to be rolled randomly because they will be "starting" events
+
+Event events[MAX_EVENTS] = {0};
 
 void addOption(Event *e, char *message, int nextIndex){
     Option option = {0};
@@ -173,6 +190,38 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
     }
 }
 
+unsigned int updateActiveFlags(GameData *game){
+    unsigned int flags = COND_NONE;
+    
+    // TODO: check conditions
+    
+    return flags;
+}
+
+
+#define MAX_ACTIVE_POOL 128
+int activeEventPool[MAX_ACTIVE_POOL];
+int activePoolCount = 0;
+
+void refreshEventPool(float currentDistance, unsigned int activeFlags) {
+    activePoolCount = 0;
+
+    for (int i = 0; i < MAX_RANDOM_EVENTS; i++) {
+        Event *e = &events[i];
+
+        if (e->message[0] == '\0') continue; // skip empty events
+
+        // Gating conditions
+        if (currentDistance < e->minDistance || currentDistance > e->maxDistance) continue;
+        if ((activeFlags & e->requiredFlags) != e->requiredFlags) continue; // should it be equal or have at least the required??
+        if ((activeFlags & e->forbiddenFlags) != 0) continue;
+
+        // Add to active pool
+        activeEventPool[activePoolCount++] = i;
+        if (activePoolCount >= MAX_ACTIVE_POOL) break;
+    }
+}
+
 #define MAX_CHECKPOINTS 32
 
 typedef struct {
@@ -190,15 +239,7 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory
     checkpoints->numTotal++;
 }
 
-typedef struct {
-    int weather;
-    int hours;
-    float distance;
-    enum State state;
-    int currentEvent;
-    int checkpointsVisited;
-    Party party;
-} GameData;
+
 
 int main() {
     //*___SETUP___*//
@@ -210,7 +251,6 @@ int main() {
     addCheckpoint(&checkpoints, "Carnabeira da Penha", 80, (Inventory){15, 249, 100, 23});
 
     // creating event list
-    // type message
     events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
@@ -220,38 +260,33 @@ int main() {
     events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
     events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    // type detour
     events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
     events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
     // eventEmptyHouse
-    #define EMPTY_HOUSE       11
-    #define EMPTY_HOUSE_ENTER 12
+    #define EMPTY_HOUSE        11
 
-    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[EMPTY_HOUSE], "Enter", EMPTY_HOUSE_ENTER);
+    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE);
+    addOption(&events[EMPTY_HOUSE], "Enter", 32);
     addOption(&events[EMPTY_HOUSE], "Go Away", -1);
 
-    events[EMPTY_HOUSE_ENTER] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
 
     // eventFoundStranger
-    #define FOUND_STRANGER       13
-    #define STRANGER_TALK        14
-    #define STRANGER_SHORTCUT    15
-    #define STRANGER_WRONG_ROAD  16
+    #define FOUND_STRANGER  12
 
-    events[FOUND_STRANGER]      = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[FOUND_STRANGER], "Talk",     STRANGER_TALK);
+    events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    addOption(&events[FOUND_STRANGER], "Talk",     33);
     addOption(&events[FOUND_STRANGER], "Go Away",  -1);
     
-    events[STRANGER_TALK]       = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[STRANGER_TALK], "Sim",           STRANGER_SHORTCUT);
-    addOption(&events[STRANGER_TALK], "Não responder", -1);
+    events[33] = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    addOption(&events[33], "Sim",           34);
+    addOption(&events[33], "Não responder", -1);
 
-    events[STRANGER_SHORTCUT]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[STRANGER_SHORTCUT], "Seguir",         9);
-    addOption(&events[STRANGER_SHORTCUT], "Deixar pra lá", -1);
+    events[34]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+    addOption(&events[34], "Seguir",         35);
+    addOption(&events[34], "Deixar pra lá", -1);
     
-    events[STRANGER_WRONG_ROAD] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+    events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
 
     // setup gameplay data
     GameData game = {0};
@@ -447,13 +482,16 @@ int main() {
                     game.distance = checkpoints.distance[game.checkpointsVisited];
                     game.state = STATE_STOP_CHECKPOINT;
                     activeStopMenu = 3;
-                }
+                } 
 
                 // eventos aleatorios
+                updateActiveFlags(&game);
+                refreshEventPool(game.distance, game.activeFlags);
                 bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                 if (eventShouldHappen) {
-
-                    triggerEvent(GetRandomValue(0,10), &game.currentEvent, &game.state, &game.hours);
+                    int poolIndex = GetRandomValue(0, activePoolCount - 1);
+                    int chosenEventId = activeEventPool[poolIndex];
+                    triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours);
 
                 }
             }
@@ -566,6 +604,7 @@ int main() {
                     DrawText(TextFormat("Food: %d", game.party.inventory.food), 30,  90, size, WHITE);
                     DrawText(TextFormat("Alive: %d", game.party.count),         30, 120, size, WHITE);
                     DrawText(TextFormat("Money: %d", game.party.money),         30, 150, size, WHITE);
+                    DrawText(TextFormat("Events: %d", activePoolCount),        30, 180, size, WHITE);
                 }
 
 
