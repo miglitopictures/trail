@@ -1521,8 +1521,8 @@ function toggleGridSnap() {
   gridSnapEnabled = !gridSnapEnabled;
   const btn = document.getElementById('grid-snap-btn');
   if (btn) {
-    btn.classList.toggle('btn-primary', gridSnapEnabled);
-    btn.textContent = gridSnapEnabled ? '⊞ Grid On' : '⊞ Grid Off';
+    btn.classList.toggle('canvas-btn-active', gridSnapEnabled);
+    btn.title = gridSnapEnabled ? 'Grid Snap: On' : 'Toggle Grid Snap';
   }
 }
 
