@@ -217,7 +217,9 @@ void refreshEventPool(float currentDistance, unsigned int activeFlags) {
         if ((activeFlags & e->forbiddenFlags) != 0) continue;
 
         // Add to active pool
-        activeEventPool[activePoolCount++] = i;
+        activeEventPool[activePoolCount] = i;
+        activePoolCount++;
+
         if (activePoolCount >= MAX_ACTIVE_POOL) break;
     }
 }
@@ -226,15 +228,14 @@ void refreshEventPool(float currentDistance, unsigned int activeFlags) {
 
 typedef struct {
     int numTotal;
-    // int numVisited;
-    Inventory Inventory[MAX_CHECKPOINTS];
+    Inventory inventory[MAX_CHECKPOINTS];
     float distance[MAX_CHECKPOINTS];
     char  name[MAX_CHECKPOINTS][32];
 } Checkpoints;
 
 void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory inventory){
     checkpoints->distance[checkpoints->numTotal] = distance;
-    checkpoints->Inventory[checkpoints->numTotal] = inventory;
+    checkpoints->inventory[checkpoints->numTotal] = inventory;
     strcpy(checkpoints->name[checkpoints->numTotal], name);
     checkpoints->numTotal++;
 }
@@ -265,7 +266,7 @@ int main() {
     // eventEmptyHouse
     #define EMPTY_HOUSE        11
 
-    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE);
+    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
     addOption(&events[EMPTY_HOUSE], "Enter", 32);
     addOption(&events[EMPTY_HOUSE], "Go Away", -1);
 
@@ -709,14 +710,14 @@ int main() {
                     if (GuiButton((Rectangle) {windowWidth - width - margin, windowHeight - height - margin, width, height}, "Done")) activeStopSubmenu = SUBMENU_NONE;
                     DrawText(TextFormat("Money: %d", game.party.money), 30, windowHeight - 60, 30, WHITE);
                     // (Inventory) {food, ammo, weapon, footwear}
-                    DrawText(TextFormat("FOOD:  %03d", checkpoints.Inventory[game.checkpointsVisited].food),       60,  40, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].food, &game.party.inventory.food, 5, &game.party.money);
-                    DrawText(TextFormat("AMMO:  %03d", checkpoints.Inventory[game.checkpointsVisited].ammo),       60,  80, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].ammo, &game.party.inventory.ammo, 5, &game.party.money);
-                    DrawText(TextFormat("GUNS:  %03d", checkpoints.Inventory[game.checkpointsVisited].weapon),     60, 120, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].weapon, &game.party.inventory.weapon, 10, &game.party.money);
-                    DrawText(TextFormat("SHOES: %03d", checkpoints.Inventory[game.checkpointsVisited].footwear),   60, 160, 30, WHITE);
-                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.Inventory[game.checkpointsVisited].footwear, &game.party.inventory.footwear, 10, &game.party.money);
+                    DrawText(TextFormat("FOOD:  %03d", checkpoints.inventory[game.checkpointsVisited].food),       60,  40, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 40, 30, 30}, "+")) buy(&checkpoints.inventory[game.checkpointsVisited].food, &game.party.inventory.food, 5, &game.party.money);
+                    DrawText(TextFormat("AMMO:  %03d", checkpoints.inventory[game.checkpointsVisited].ammo),       60,  80, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 80, 30, 30}, "+")) buy(&checkpoints.inventory[game.checkpointsVisited].ammo, &game.party.inventory.ammo, 5, &game.party.money);
+                    DrawText(TextFormat("GUNS:  %03d", checkpoints.inventory[game.checkpointsVisited].weapon),     60, 120, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 120, 30, 30}, "+")) buy(&checkpoints.inventory[game.checkpointsVisited].weapon, &game.party.inventory.weapon, 10, &game.party.money);
+                    DrawText(TextFormat("SHOES: %03d", checkpoints.inventory[game.checkpointsVisited].footwear),   60, 160, 30, WHITE);
+                    if (GuiButton((Rectangle) {250, 160, 30, 30}, "+")) buy(&checkpoints.inventory[game.checkpointsVisited].footwear, &game.party.inventory.footwear, 10, &game.party.money);
                 }
                 else if (activeStopSubmenu == SUBMENU_SELL) {
                     int margin = 60;
