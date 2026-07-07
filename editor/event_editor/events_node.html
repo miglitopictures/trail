@@ -24,6 +24,13 @@
     <div id="nodes-layer"></div>
   </div>
   <div id="marquee"></div>
+  <button class="panel-reopen-btn" id="panel-reopen-btn" onclick="toggleRightPanel()" title="Expand panel">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="10.3" y1="2.5" x2="10.3" y2="13.5" stroke="currentColor" stroke-width="1.3"/>
+      <rect x="10.3" y="2.5" width="4.2" height="11" rx="0" fill="currentColor" opacity="0.18"/>
+    </svg>
+  </button>
   <div class="canvas-actions">
     <button class="canvas-btn canvas-btn-primary" onclick="newEvent()" title="Add Story Node">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="7" y="2" width="2" height="12" rx="1" fill="currentColor"/><rect x="2" y="7" width="12" height="2" rx="1" fill="currentColor"/></svg>
@@ -53,6 +60,13 @@
   <div class="tabs">
     <button class="tab-btn active" id="tab-edit-btn" onclick="switchTab('edit')">Properties Panel</button>
     <button class="tab-btn" id="tab-code-btn" onclick="switchTab('code')">Generated Arrays</button>
+    <button class="panel-toggle-btn" id="panel-toggle-btn" onclick="toggleRightPanel()" title="Close panel">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="10.3" y1="2.5" x2="10.3" y2="13.5" stroke="currentColor" stroke-width="1.3"/>
+        <rect x="10.3" y="2.5" width="4.2" height="11" rx="0" fill="currentColor" opacity="0.18"/>
+      </svg>
+    </button>
   </div>
   <div class="panel-content active" id="panel-edit">
     <div class="empty-state" id="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px;">
@@ -1563,6 +1577,22 @@ function switchTab(tab) {
   document.getElementById('panel-edit').className = 'panel-content' + (tab === 'edit' ? ' active' : '');
   document.getElementById('panel-code').className = 'panel-content' + (tab === 'code' ? ' active' : '');
 }
+
+function setPanelCollapsed(collapsed) {
+  document.body.classList.toggle('panel-collapsed', collapsed);
+  const toggleBtn = document.getElementById('panel-toggle-btn');
+  const reopenBtn = document.getElementById('panel-reopen-btn');
+  toggleBtn.title = collapsed ? 'Open panel' : 'Close panel';
+  reopenBtn.title = 'Expand panel';
+  localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0');
+}
+
+function toggleRightPanel() {
+  setPanelCollapsed(!document.body.classList.contains('panel-collapsed'));
+}
+
+// Restore panel collapsed/expanded state from a previous session
+setPanelCollapsed(localStorage.getItem('vidas_secas_panel_collapsed') === '1');
 
 function generateCode() {
   // 1. Calculate incoming links for all events
