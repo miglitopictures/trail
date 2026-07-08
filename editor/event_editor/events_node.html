@@ -299,6 +299,11 @@ let panX = 0, panY = 0;  // Will be set to center on init
 let zoom = 1;
 let isPanning = false, startPanX = 0, startPanY = 0;
 
+// Camera position is persisted independently of the undo/redo history (see
+// persistViewport()) — it's "where you're looking", not "what you did", so it
+// shouldn't jump around as a side-effect of undoing/redoing content edits.
+const VIEWPORT_KEY = 'vidas_secas_viewport';
+
 // ── Node dragging (single node & multi-select) ──
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
@@ -336,8 +341,10 @@ let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom }
 // 3. UNDO / REDO HISTORY
 // ══════════════════════════════════════════════════════════════════
 function saveState() {
-  // Deep clone the current state
-  const currentState = JSON.stringify({ events, groups, groupIdCounter, zoom, panX, panY });
+  // Deep clone the current state. Deliberately excludes zoom/panX/panY — camera
+  // position is "where you're looking", not "what changed", and shouldn't be
+  // captured or restored as part of content undo/redo (see persistViewport()).
+  const currentState = JSON.stringify({ events, groups, groupIdCounter });
   
   // Prevent duplicate consecutive states
   if (historyIndex >= 0 && historyStack[historyIndex] === currentState) return;
@@ -423,8 +430,6 @@ function undo() {
       events = parsed.events || [];
       groups = parsed.groups || [];
       groupIdCounter = parsed.groupIdCounter || 0;
-      zoom = parsed.zoom ?? zoom;
-      if (parsed.panX !== undefined) { panX = parsed.panX; panY = parsed.panY; }
 
       // Clear selections to prevent referencing deleted indices
       selectedIdx = null;
@@ -451,8 +456,6 @@ function redo() {
       events = parsed.events || [];
       groups = parsed.groups || [];
       groupIdCounter = parsed.groupIdCounter || 0;
-      zoom = parsed.zoom ?? zoom;
-      if (parsed.panX !== undefined) { panX = parsed.panX; panY = parsed.panY; }
 
       // Clear selections to prevent referencing deleted indices
       selectedIdx = null;
@@ -1139,6 +1142,18 @@ function updateCanvasTransform() {
   // Update zoom level badge
   const badge = document.getElementById('zoom-badge');
   if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
+  persistViewport();
+}
+
+// Persists camera position independently of the undo/redo history/localStorage
+// key — small and cheap to write on every transform update (pan/zoom), so the
+// view is restored on reload without ever being coupled to content edits.
+function persistViewport() {
+  try {
+    localStorage.setItem(VIEWPORT_KEY, JSON.stringify({ panX, panY, zoom }));
+  } catch (e) {
+    // Non-critical — losing the last camera position on reload isn't a big deal.
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2639,8 +2654,6 @@ if (storedHistory) {
     events = parsedState.events || [];
     groups = parsedState.groups || [];
     groupIdCounter = parsedState.groupIdCounter || 0;
-    if (parsedState.zoom !== undefined) zoom = parsedState.zoom;
-    if (parsedState.panX !== undefined) { panX = parsedState.panX; panY = parsedState.panY; }
   }
 } else {
   // If no history, load the default seed
@@ -2648,10 +2661,28 @@ if (storedHistory) {
   saveState(); // Create initial baseline history state
 }
 
+// Camera position lives in its own key, independent of content history (see
+// persistViewport()). Restore it if we have it; only fitToScreen — which
+// would otherwise clobber whatever we just restored — on a genuine first
+// visit where no viewport has ever been saved.
+const storedViewport = localStorage.getItem(VIEWPORT_KEY);
 renderCanvas();
-fitToScreen();  // Fit all seed nodes into view on first load
+if (storedViewport) {
+  try {
+    const parsedViewport = JSON.parse(storedViewport);
+    if (parsedViewport.panX !== undefined) panX = parsedViewport.panX;
+    if (parsedViewport.panY !== undefined) panY = parsedViewport.panY;
+    if (parsedViewport.zoom !== undefined) zoom = parsedViewport.zoom;
+    updateCanvasTransform();
+  } catch (e) {
+    fitToScreen();
+  }
+} else {
+  fitToScreen();  // First-ever visit — fit all seed nodes into view
+}
 renderForm();
 generateCode();
+
 </script>
 </body>
 </html>

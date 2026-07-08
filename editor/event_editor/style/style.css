@@ -419,6 +419,22 @@ input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:foc
 }
 textarea { resize: vertical; min-height: 80px; }
 
+/* ── NUMBER INPUT SPINNERS (Distance Gate fields) ──
+   The native up/down widget is an unstyled OS-native control that clashes
+   with the dark theme and can't be reliably restyled to match it across
+   browsers, so we just remove it everywhere instead — a plain field, no
+   widget. The value can still be stepped with the up/down arrow keys or
+   scroll-while-focused. */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .type-selector { display: flex; gap: 6px; flex-wrap: wrap; }
 .type-btn {
   flex: 1; min-width: 80px; padding: 9px; background: var(--panel); border: 1px solid var(--border-solid);
