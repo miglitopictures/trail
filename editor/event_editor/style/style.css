@@ -407,6 +407,11 @@ body.panel-collapsed .panel-reopen-btn {
 .flag-chip:hover { border-color: var(--border-md); color: var(--text); }
 .flag-chip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .flag-chip-row.forbidden .flag-chip.active { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+/* A flag active in the opposite list (required vs forbidden) can't also be
+   selected here — same footprint as a normal chip, just muted and inert,
+   so the row doesn't reflow when a flag becomes unselectable. */
+.flag-chip.disabled-exclusive { opacity: 0.4; }
+.flag-chip.disabled-exclusive:hover { border-color: var(--border-solid); color: var(--muted); }
 .flags-empty { font-size: 11.5px; color: var(--muted); font-style: italic; }
 
 input[type="text"], input[type="number"], textarea, select {

@@ -1903,13 +1903,23 @@ function renderFlagSelector(containerId, activeKeys) {
     container.innerHTML = '<div class="flags-empty">No condition flags defined yet — add entries to CONDITION_FLAGS.</div>';
     return;
   }
+  const ev = events[selectedIdx];
+  const isRequired = containerId === 'required-flags-container';
+  // A flag active in the OTHER list would make this condition unsatisfiable
+  // (must be set AND unset at once), so it's shown disabled here rather
+  // than left clickable — see toggleFlag() for what a click on it does.
+  const oppositeKeys = isRequired ? (ev.forbiddenFlags || []) : (ev.requiredFlags || []);
   CONDITION_FLAGS.forEach(flag => {
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'flag-chip' + ((activeKeys || []).includes(flag.key) ? ' active' : '');
+    const isActive = (activeKeys || []).includes(flag.key);
+    const isOpposite = oppositeKeys.includes(flag.key);
+    chip.className = 'flag-chip' + (isActive ? ' active' : '') + (isOpposite ? ' disabled-exclusive' : '');
     chip.textContent = flag.label;
-    chip.title = `${flag.key} — bit ${flag.bit}`;
-    chip.onclick = () => toggleFlag(containerId === 'required-flags-container' ? 'requiredFlags' : 'forbiddenFlags', flag.key);
+    chip.title = isOpposite
+      ? `${flag.key} — bit ${flag.bit} (currently ${isRequired ? 'forbidden' : 'required'}; click to move it here instead)`
+      : `${flag.key} — bit ${flag.bit}`;
+    chip.onclick = () => toggleFlag(isRequired ? 'requiredFlags' : 'forbiddenFlags', flag.key);
     container.appendChild(chip);
   });
 }
@@ -1917,9 +1927,21 @@ function renderFlagSelector(containerId, activeKeys) {
 function toggleFlag(field, key) {
   const ev = events[selectedIdx];
   const arr = ev[field] || (ev[field] = []);
-  const pos = arr.indexOf(key);
-  if (pos === -1) arr.push(key); else arr.splice(pos, 1);
-  renderFlagSelector(field === 'requiredFlags' ? 'required-flags-container' : 'forbidden-flags-container', arr);
+  const oppositeField = field === 'requiredFlags' ? 'forbiddenFlags' : 'requiredFlags';
+  const oppositeArr = ev[oppositeField] || (ev[oppositeField] = []);
+  const oppositePos = oppositeArr.indexOf(key);
+  if (oppositePos !== -1) {
+    // Flag was set on the opposite side — moving it here means it stops
+    // being forbidden/required over there. Swap rather than block, so one
+    // click flips a flag straight from one list to the other.
+    oppositeArr.splice(oppositePos, 1);
+    arr.push(key);
+  } else {
+    const pos = arr.indexOf(key);
+    if (pos === -1) arr.push(key); else arr.splice(pos, 1);
+  }
+  renderFlagSelector('required-flags-container', ev.requiredFlags || []);
+  renderFlagSelector('forbidden-flags-container', ev.forbiddenFlags || []);
   generateCode();
   saveState();
 }
