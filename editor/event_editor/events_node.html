@@ -1099,6 +1099,7 @@ function drawConnections() {
 function updateCanvasTransform() {
   const canvas = document.getElementById('canvas');
   canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  canvas.style.outlineWidth = `${1 / zoom}px`;
   // Ensure canvas and SVG layer always cover the full virtual area
   canvas.style.width  = `${CANVAS_SIZE}px`;
   canvas.style.height = `${CANVAS_SIZE}px`;

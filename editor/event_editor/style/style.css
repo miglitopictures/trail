@@ -199,6 +199,7 @@ header .subtitle { color: var(--muted); font-size: 13px; font-family: var(--sans
   width: 20000px; height: 20000px;
   pointer-events: none;
   z-index: 1;
+  overflow: visible;
 }
 
 /* ── CONNECTION GROUPS & HITBOXES ── */
