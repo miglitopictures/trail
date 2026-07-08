@@ -57,6 +57,10 @@
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="3" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="13" r="1.2" fill="currentColor" opacity="0.4"/></svg>
     </button>
     <div class="canvas-btn-divider"></div>
+    <button class="canvas-btn" onclick="openSpotlight()" title="Quick Search Nodes (Ctrl+K)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4.3" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <div class="canvas-btn-divider"></div>
     <button class="canvas-btn" onclick="openHelp()" title="Help & Shortcuts">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.2C6.2 5.1 7 4.4 8 4.4s1.8.7 1.8 1.6c0 .8-.5 1.3-1.1 1.7C8.1 8.1 7.8 8.5 7.8 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7.8" cy="11" r="0.8" fill="currentColor"/></svg>
     </button>
@@ -146,6 +150,7 @@
         <div class="help-row"><kbd>Drag canvas</kbd><span>Pan the workspace</span></div>
         <div class="help-row"><kbd>Scroll</kbd><span>Zoom in / out</span></div>
         <div class="help-row"><kbd>F</kbd><span>Fit all nodes to screen</span></div>
+        <div class="help-row"><kbd>Ctrl K</kbd><span>Quick search / jump to a node</span></div>
         <div class="help-row"><kbd>Ctrl +</kbd><span>Zoom in</span></div>
         <div class="help-row"><kbd>Ctrl −</kbd><span>Zoom out</span></div>
         <div class="help-row"><kbd>Ctrl 0</kbd><span>Reset zoom to 100%</span></div>
@@ -184,6 +189,22 @@
         <button class="btn btn-danger btn-sm" onclick="confirmResetBoard()">Reset Board</button>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- Spotlight Search — quick-jump to any node by define name, message text, type, or flag -->
+<div id="spotlight-overlay" class="help-overlay spotlight-overlay" onclick="closeSpotlight(event)">
+  <div class="spotlight-modal" onclick="event.stopPropagation()">
+    <div class="spotlight-input-row">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="spotlight-input-icon"><circle cx="6.8" cy="6.8" r="4.3" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input type="text" id="spotlight-input" class="spotlight-input" placeholder="Search nodes by name, message, type, or flag…" autocomplete="off" spellcheck="false" oninput="onSpotlightInput()" onkeydown="onSpotlightKeydown(event)">
+    </div>
+    <div class="spotlight-results" id="spotlight-results"></div>
+    <div class="spotlight-hint">
+      <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+      <span><kbd>Enter</kbd> Jump to node</span>
+      <span><kbd>Esc</kbd> Close</span>
     </div>
   </div>
 </div>
@@ -577,6 +598,210 @@ function closeHelp(e) {
 function confirmResetBoard() {
   closeHelp();
   setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 5b. SPOTLIGHT SEARCH — quick-jump to any node
+// ══════════════════════════════════════════════════════════════════
+// Searches across define name, message text, type label, and flag names/keys.
+// Results are scored so exact/prefix matches on the short, high-signal
+// fields (define, type, flags) outrank a mid-string hit buried in a long
+// message — see scoreMatch() below.
+let spotlightResults = [];
+let spotlightActiveIdx = -1;
+
+function openSpotlight() {
+  document.getElementById('spotlight-overlay').classList.add('open');
+  const input = document.getElementById('spotlight-input');
+  input.value = '';
+  renderSpotlightResults('');
+  // Focus after the transition starts so the modal is visually present
+  // before the keyboard/IME grabs focus.
+  setTimeout(() => input.focus(), 10);
+}
+
+function closeSpotlight(e) {
+  if (!e || e.target === document.getElementById('spotlight-overlay')) {
+    document.getElementById('spotlight-overlay').classList.remove('open');
+  }
+}
+
+function onSpotlightInput() {
+  renderSpotlightResults(document.getElementById('spotlight-input').value);
+}
+
+function onSpotlightKeydown(e) {
+  if (e.key === 'Escape') { closeSpotlight(); return; }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (spotlightResults.length === 0) return;
+    spotlightActiveIdx = Math.min(spotlightActiveIdx + 1, spotlightResults.length - 1);
+    highlightSpotlightResult();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (spotlightResults.length === 0) return;
+    spotlightActiveIdx = Math.max(spotlightActiveIdx - 1, 0);
+    highlightSpotlightResult();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (spotlightActiveIdx >= 0 && spotlightResults[spotlightActiveIdx]) {
+      jumpToNode(spotlightResults[spotlightActiveIdx].idx);
+    }
+  }
+}
+
+// Lower is better: 0 = exact match on a field, then prefix, then substring.
+// wordBoundary gives a small bonus so "house" beats a mid-word hit like
+// "warehouse" when both are substrings.
+function scoreMatch(fieldValue, query) {
+  if (!fieldValue) return Infinity;
+  const v = fieldValue.toLowerCase();
+  const q = query.toLowerCase();
+  const pos = v.indexOf(q);
+  if (pos === -1) return Infinity;
+  if (v === q) return 0;
+  if (pos === 0) return 1;
+  const boundary = /[\s_\-]/.test(v[pos - 1]);
+  return boundary ? 2 : 3;
+}
+
+function computeSpotlightMatches(query) {
+  const q = query.trim();
+  if (!q) {
+    // Empty query — list every node in canvas order so Spotlight also works
+    // as a lightweight "jump to node N" browser, not just a search box.
+    return events.map((ev, idx) => ({ idx, score: 0, field: null }));
+  }
+  const { remap } = computeEventOrder();
+  const results = [];
+  events.forEach((ev, idx) => {
+    let best = Infinity, bestField = null;
+    const candidates = [
+      ['define', ev.define],
+      ['message', ev.message],
+      ['type', (EVENT_TYPES[ev.type] || {}).label],
+      ['index', `[${remap[idx]}]`],
+    ];
+    (ev.requiredFlags || []).forEach(k => candidates.push(['flag', (CONDITION_FLAGS.find(f => f.key === k) || {}).label || k]));
+    (ev.forbiddenFlags || []).forEach(k => candidates.push(['flag', (CONDITION_FLAGS.find(f => f.key === k) || {}).label || k]));
+    candidates.forEach(([field, val]) => {
+      const s = scoreMatch(val, q);
+      if (s < best) { best = s; bestField = field; }
+    });
+    if (best !== Infinity) results.push({ idx, score: best, field: bestField });
+  });
+  // Stable-ish tiebreak: better score first, then canvas/creation order.
+  results.sort((a, b) => a.score - b.score || a.idx - b.idx);
+  return results;
+}
+
+function highlightMatch(text, query) {
+  if (!query.trim() || !text) return escHtml(text || '');
+  const idx = text.toLowerCase().indexOf(query.trim().toLowerCase());
+  if (idx === -1) return escHtml(text);
+  return escHtml(text.slice(0, idx)) + '<mark>' + escHtml(text.slice(idx, idx + query.trim().length)) + '</mark>' + escHtml(text.slice(idx + query.trim().length));
+}
+
+function renderSpotlightResults(query) {
+  spotlightResults = computeSpotlightMatches(query).slice(0, 40);
+  spotlightActiveIdx = spotlightResults.length > 0 ? 0 : -1;
+  const container = document.getElementById('spotlight-results');
+  container.innerHTML = '';
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="spotlight-empty">No nodes on the board yet.</div>';
+    return;
+  }
+  if (spotlightResults.length === 0) {
+    container.innerHTML = `<div class="spotlight-empty">No nodes match "${escHtml(query)}".</div>`;
+    return;
+  }
+
+  const { remap } = computeEventOrder();
+  spotlightResults.forEach((res, row) => {
+    const ev = events[res.idx];
+    const typeDef = EVENT_TYPES[ev.type] || { label: ev.type, bg: 'var(--fill)', fg: 'var(--muted)' };
+    const item = document.createElement('div');
+    item.className = 'spotlight-result' + (row === spotlightActiveIdx ? ' highlighted' : '');
+    item.onmouseenter = () => { spotlightActiveIdx = row; highlightSpotlightResult(); };
+    item.onclick = () => jumpToNode(res.idx);
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'spotlight-result-type';
+    typeBadge.style.background = typeDef.bg;
+    typeBadge.style.color = typeDef.fg;
+    typeBadge.textContent = typeDef.label;
+
+    const body = document.createElement('div');
+    body.className = 'spotlight-result-body';
+    const title = document.createElement('div');
+    title.className = 'spotlight-result-title' + (ev.define ? '' : ' untitled');
+    title.innerHTML = ev.define ? highlightMatch(ev.define, query) : '(unnamed node)';
+    const sub = document.createElement('div');
+    sub.className = 'spotlight-result-sub';
+    sub.innerHTML = highlightMatch(ev.message || '(no message)', query);
+    body.appendChild(title);
+    body.appendChild(sub);
+
+    const idxLabel = document.createElement('span');
+    idxLabel.className = 'spotlight-result-idx';
+    idxLabel.textContent = `[${remap[res.idx]}]`;
+
+    item.appendChild(typeBadge);
+    item.appendChild(body);
+    item.appendChild(idxLabel);
+    container.appendChild(item);
+  });
+}
+
+function highlightSpotlightResult() {
+  document.querySelectorAll('.spotlight-result').forEach((el, i) => {
+    el.classList.toggle('highlighted', i === spotlightActiveIdx);
+    if (i === spotlightActiveIdx) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+// Selects the node, expands its group if minimized so it's actually visible,
+// pans/zooms it into view, and gives it a brief pulse so it's easy to spot
+// even when the properties panel already shows it as selected.
+function jumpToNode(idx) {
+  closeSpotlight();
+  if (!events[idx]) return;
+
+  let groupsChanged = false;
+  groups.forEach(g => {
+    if (g.isMinimized && g.nodeIndices.includes(idx)) { g.isMinimized = false; groupsChanged = true; }
+  });
+
+  selectedIndices.clear();
+  selectedLink = null;
+  selectedRouter = null;
+  selectedGroupId = null;
+  if (groupsChanged) renderCanvas(); // rebuilds nodes-layer so un-minimized nodes lose their hidden class (also re-renders groups + connections)
+  selectEvent(idx);
+
+  const container = document.getElementById('canvas-container');
+  const vw = container.clientWidth, vh = container.clientHeight;
+  const NODE_W = 260, NODE_H = 160;
+  const ev = events[idx];
+  // Keep the current zoom if it's already reasonable to look at; only bump
+  // it up when the user was zoomed out so far the node would appear tiny.
+  let targetZoom = zoom < 0.5 ? 0.85 : zoom;
+  targetZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, targetZoom));
+  panX = vw / 2 - (ev.x + NODE_W / 2) * targetZoom;
+  panY = vh / 2 - (ev.y + NODE_H / 2) * targetZoom;
+  zoom = targetZoom;
+  updateCanvasTransform();
+  persistViewport();
+
+  setTimeout(() => {
+    const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
+    if (nodeEl) {
+      nodeEl.classList.remove('spotlight-flash');
+      void nodeEl.offsetWidth; // restart animation if triggered twice in a row
+      nodeEl.classList.add('spotlight-flash');
+    }
+  }, 20);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1417,16 +1642,25 @@ function onNodeMouseDown(e, idx) {
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
-  // While the Help or Event Preview modal is open, only Escape does anything —
-  // canvas/graph shortcuts (delete, duplicate, group, undo...) stay inert so a
-  // stray keypress can't edit the graph behind the modal.
+  // While the Help, Event Preview, or Spotlight modal is open, only Escape does
+  // anything — canvas/graph shortcuts (delete, duplicate, group, undo...) stay
+  // inert so a stray keypress can't edit the graph behind the modal.
   const helpOpen = document.getElementById('help-overlay').classList.contains('open');
   const previewOpen = document.getElementById('event-preview-overlay').classList.contains('open');
-  if (helpOpen || previewOpen) {
+  const spotlightOpen = document.getElementById('spotlight-overlay').classList.contains('open');
+  if (helpOpen || previewOpen || spotlightOpen) {
     if (e.key === 'Escape') {
       closeHelp();
       closeEventPreview();
+      closeSpotlight();
     }
+    return;
+  }
+
+  // Ctrl/Cmd+K — open Spotlight search
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openSpotlight();
     return;
   }
 

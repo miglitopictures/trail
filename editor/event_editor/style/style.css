@@ -233,6 +233,13 @@ header .subtitle { color: var(--muted); font-size: 13px; font-family: var(--sans
   box-shadow: 0 0 0 3px var(--purple-glow), var(--shadow-md);
   z-index: 9;
 }
+/* Brief pulse on the node Spotlight just jumped to, so the eye finds it
+   immediately even though .active already outlines it permanently. */
+.node.spotlight-flash { animation: spotlightPulse 0.9s ease-out; }
+@keyframes spotlightPulse {
+  0%   { box-shadow: 0 0 0 3px var(--accent-glow), 0 0 0 10px var(--accent-glow), var(--shadow-md); }
+  100% { box-shadow: 0 0 0 3px var(--accent-glow), 0 0 0 10px transparent, var(--shadow-md); }
+}
 
 .node-header {
   padding: 10px 14px;
@@ -410,7 +417,7 @@ body.panel-collapsed .panel-reopen-btn {
 /* A flag active in the opposite list (required vs forbidden) can't also be
    selected here — same footprint as a normal chip, just muted and inert,
    so the row doesn't reflow when a flag becomes unselectable. */
-.flag-chip.disabled-exclusive { opacity: 0.4; }
+.flag-chip.disabled-exclusive { opacity: 0.4; cursor: not-allowed; }
 .flag-chip.disabled-exclusive:hover { border-color: var(--border-solid); color: var(--muted); }
 .flags-empty { font-size: 11.5px; color: var(--muted); font-style: italic; }
 
@@ -754,6 +761,79 @@ kbd {
   padding: 12px 14px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
+
+/* ── SPOTLIGHT SEARCH ── */
+/* Sits near the top of the screen (unlike the vertically-centered help/preview
+   modals) since that's the conventional spotlight position and keeps it clear
+   of the canvas content the user is trying to locate. */
+.spotlight-overlay { align-items: flex-start; padding-top: 12vh; }
+.spotlight-modal {
+  background: var(--clr-panel);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 560px; max-width: 92vw;
+  max-height: 60vh;
+  display: flex; flex-direction: column;
+  transform: scale(0.97) translateY(-4px);
+  transition: transform 0.16s;
+  overflow: hidden;
+}
+.spotlight-overlay.open .spotlight-modal { transform: scale(1) translateY(0); }
+
+.spotlight-input-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-solid);
+  flex-shrink: 0;
+}
+.spotlight-input-icon { color: var(--muted); flex-shrink: 0; }
+.spotlight-input {
+  flex: 1; border: none; background: none; outline: none;
+  font-size: 15px; color: var(--text); font-family: var(--sans);
+  padding: 2px 0;
+}
+.spotlight-input::placeholder { color: var(--muted); }
+
+.spotlight-results { overflow-y: auto; padding: 6px; }
+.spotlight-result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.spotlight-result.highlighted { background: var(--fill); }
+.spotlight-result-type {
+  flex-shrink: 0; font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; font-family: var(--sans);
+  padding: 3px 6px; border-radius: 5px; white-space: nowrap;
+}
+.spotlight-result-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.spotlight-result-title {
+  font-size: 13.5px; color: var(--text); font-family: var(--sans); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.spotlight-result-title.untitled { color: var(--muted); font-style: italic; }
+.spotlight-result-sub {
+  font-size: 11.5px; color: var(--muted); font-family: var(--sans);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.spotlight-result mark {
+  background: var(--accent-dim); color: var(--accent);
+  border-radius: 3px; padding: 0 1px;
+}
+.spotlight-result-idx {
+  flex-shrink: 0; font-size: 10.5px; color: var(--muted); font-family: var(--mono);
+}
+.spotlight-empty {
+  padding: 28px 16px; text-align: center; color: var(--muted);
+  font-size: 13px; font-family: var(--sans);
+}
+.spotlight-hint {
+  padding: 10px 16px; border-top: 1px solid var(--border-solid);
+  display: flex; gap: 14px; flex-shrink: 0;
+}
+.spotlight-hint span { font-size: 11px; color: var(--muted); font-family: var(--sans); display: flex; align-items: center; gap: 5px; }
+.spotlight-hint kbd { font-size: 10px; padding: 1px 5px; }
 
 /* ── EVENT PREVIEW MODAL ── */
 /* Mocks the game's STATE_EVENT screen: a black frame, a bordered message box
