@@ -388,12 +388,31 @@ body.panel-collapsed .panel-reopen-btn {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;
 }
 .field-label-row .field-label { margin-bottom: 0; }
+.field-label-hint {
+  text-transform: none; font-weight: 400; letter-spacing: 0; font-size: 10.5px; color: var(--muted);
+}
+.field-warning {
+  font-size: 11px; color: var(--danger); margin-top: 6px; min-height: 14px; font-family: var(--sans);
+}
 
-input[type="text"], textarea, select {
+/* Condition-flag chips — Required uses the accent color, Forbidden uses danger,
+   so the two lists stay visually distinct even with the same flag toggled in both. */
+.flag-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.flag-chip {
+  padding: 5px 10px; font-size: 11.5px; border-radius: 999px; font-family: var(--sans);
+  border: 1px solid var(--border-solid); background: var(--panel); color: var(--muted);
+  cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.flag-chip:hover { border-color: var(--border-md); color: var(--text); }
+.flag-chip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.flag-chip-row.forbidden .flag-chip.active { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+.flags-empty { font-size: 11.5px; color: var(--muted); font-style: italic; }
+
+input[type="text"], input[type="number"], textarea, select {
   width: 100%; background: var(--panel); border: 1px solid var(--border-solid); color: var(--text);
   font-family: var(--sans); font-size: 14px; padding: 10px 14px; border-radius: var(--radius-md); outline: none;
 }
-input[type="text"]:focus, textarea:focus, select:focus {
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }

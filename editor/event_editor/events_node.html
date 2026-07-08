@@ -94,6 +94,23 @@
         <div class="type-selector" id="type-selector-container"></div>
       </div>
       <div class="field-group">
+        <div class="field-label">Distance Gate (km) <span class="field-label-hint">— won't roll outside this range</span></div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="number" id="f-min-distance" step="1" style="flex:1;" onchange="onFieldChange()">
+          <span style="color:var(--muted); font-size:12px;">to</span>
+          <input type="number" id="f-max-distance" step="1" style="flex:1;" onchange="onFieldChange()">
+        </div>
+        <div class="field-warning" id="f-distance-warning"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Required Flags <span class="field-label-hint">(ALL must be active)</span></div>
+        <div class="flag-chip-row" id="required-flags-container"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Forbidden Flags <span class="field-label-hint">(NONE may be active)</span></div>
+        <div class="flag-chip-row forbidden" id="forbidden-flags-container"></div>
+      </div>
+      <div class="field-group">
         <div class="field-label-row">
           <div class="field-label">Options Layout Config Matrix</div>
           <button class="btn btn-sm btn-primary" id="preview-event-btn" onclick="openEventPreview()" style="display:none;">▶ Preview Event</button>
@@ -226,6 +243,28 @@ const EVENT_TYPES = {
 //   'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.35)' },
 //   'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
 };
+
+// Event condition flags — mirrors the "// Event condition flags" #define block
+// in trail.c (COND_NONE plus the commented-out COND_x bitmask list).
+//
+// To add a new flag once you wire it up in C: add one entry below (key must
+// match the #define name exactly) and uncomment/add its #define in trail.c.
+// Nothing else in the editor needs to change — the Required/Forbidden Flags
+// checklists in the Properties Panel and the generated C expressions
+// (e.g. `(COND_LOW_FOOD | COND_NIGHT_TIME)`) both derive from this list
+// automatically, same as adding a new EVENT_TYPES entry above.
+//
+// `bit` is display-only (shown in the chip's tooltip so it's easy to keep in
+// sync with trail.c's `(1 << n)` comments) — the generated code always
+// references flags by name, never by numeric value, so bit assignment in C
+// can change freely without ever touching this editor.
+const CONDITION_FLAGS = [
+  { key: 'COND_NEEDS_SICK', label: 'Party Member Sick', bit: 0 },
+  { key: 'COND_LOW_FOOD',   label: 'Low Food',          bit: 1 },
+  { key: 'COND_NO_MONEY',   label: 'No Money',          bit: 2 },
+  { key: 'COND_NIGHT_TIME', label: 'Night Time',        bit: 3 },
+  { key: 'COND_IN_DESERT',  label: 'In Desert',         bit: 4 },
+];
 
 const GROUP_COLORS = [
   { border: 'rgba(94,92,230,0.6)',  bg: 'rgba(94,92,230,0.06)',  label: 'rgba(94,92,230,0.18)',  text: '#a09ef5' },
@@ -369,6 +408,15 @@ function snapToGrid(v) {
 
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
+}
+
+// Turns a list of CONDITION_FLAGS keys into the C expression generateCode()
+// emits for requiredFlags/forbiddenFlags — COND_NONE when empty, the bare
+// name for one flag, or a parenthesized bitwise-OR for several.
+function flagsToC(flagKeys) {
+  if (!flagKeys || flagKeys.length === 0) return 'COND_NONE';
+  if (flagKeys.length === 1) return flagKeys[0];
+  return `(${flagKeys.join(' | ')})`;
 }
 
 function makeEditable(element, initialValue, isTextArea, onSave) {
@@ -1092,7 +1140,7 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
   const newX = snapToGrid(clickX - 125);
   const newY = snapToGrid(clickY - 60);
   const newIdx = events.length;
-  events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+  events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: newX, y: newY });
 
   renderCanvas();
   selectEvent(newIdx);
@@ -1554,7 +1602,7 @@ window.onmouseup = (e) => {
       const newX = snapToGrid(activeLinkDrag.currentX);
       const newY = snapToGrid(activeLinkDrag.currentY - 25);
       const newIdx = events.length;
-      events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+      events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: newX, y: newY });
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = newIdx;
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
       activeLinkDrag = null;
@@ -1644,6 +1692,11 @@ function renderForm() {
   document.getElementById('f-define').value = ev.define || '';
   document.getElementById('f-message').value = ev.message || '';
   document.getElementById('char-count').textContent = (ev.message || '').length;
+  document.getElementById('f-min-distance').value = ev.minDistance ?? 0;
+  document.getElementById('f-max-distance').value = ev.maxDistance ?? 9999;
+  updateDistanceValidationUI();
+  renderFlagSelector('required-flags-container', ev.requiredFlags || []);
+  renderFlagSelector('forbidden-flags-container', ev.forbiddenFlags || []);
   renderTypeSelector(ev.type); renderOptions();
 }
 
@@ -1664,6 +1717,37 @@ function renderTypeSelector(activeType) {
     };
     container.appendChild(btn);
   });
+}
+
+// Renders one Required/Forbidden flag checklist as toggle chips, driven
+// entirely by CONDITION_FLAGS — add a flag there and it shows up here with
+// no other changes needed.
+function renderFlagSelector(containerId, activeKeys) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  if (CONDITION_FLAGS.length === 0) {
+    container.innerHTML = '<div class="flags-empty">No condition flags defined yet — add entries to CONDITION_FLAGS.</div>';
+    return;
+  }
+  CONDITION_FLAGS.forEach(flag => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'flag-chip' + ((activeKeys || []).includes(flag.key) ? ' active' : '');
+    chip.textContent = flag.label;
+    chip.title = `${flag.key} — bit ${flag.bit}`;
+    chip.onclick = () => toggleFlag(containerId === 'required-flags-container' ? 'requiredFlags' : 'forbiddenFlags', flag.key);
+    container.appendChild(chip);
+  });
+}
+
+function toggleFlag(field, key) {
+  const ev = events[selectedIdx];
+  const arr = ev[field] || (ev[field] = []);
+  const pos = arr.indexOf(key);
+  if (pos === -1) arr.push(key); else arr.splice(pos, 1);
+  renderFlagSelector(field === 'requiredFlags' ? 'required-flags-container' : 'forbidden-flags-container', arr);
+  generateCode();
+  saveState();
 }
 
 function renderOptions() {
@@ -1731,8 +1815,27 @@ function onFieldChange() {
   ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
   ev.message = document.getElementById('f-message').value;
   document.getElementById('char-count').textContent = ev.message.length;
+
+  const minVal = parseFloat(document.getElementById('f-min-distance').value);
+  const maxVal = parseFloat(document.getElementById('f-max-distance').value);
+  ev.minDistance = isNaN(minVal) ? 0 : minVal;
+  ev.maxDistance = isNaN(maxVal) ? 9999 : maxVal;
+  updateDistanceValidationUI();
+
   renderCanvas(); generateCode();
   saveState();
+}
+
+// Warns in-place when minDistance > maxDistance — a valid-looking config that
+// would actually make refreshEventPool() never select this event.
+function updateDistanceValidationUI() {
+  const ev = events[selectedIdx];
+  const warningEl = document.getElementById('f-distance-warning');
+  if ((ev.minDistance ?? 0) > (ev.maxDistance ?? 9999)) {
+    warningEl.textContent = '⚠ Min distance is greater than max distance — this event can never trigger.';
+  } else {
+    warningEl.textContent = '';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2034,7 +2137,7 @@ function newEvent() {
   const cy = (container.clientHeight / 2 - panY) / zoom;
   const x = cx - 125 + (events.length * 25 % 200);
   const y = cy -  60 + (events.length * 45 % 300);
-  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
+  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x, y });
   renderCanvas(); selectEvent(events.length - 1);
   saveState();
 }
@@ -2145,7 +2248,11 @@ function generateCode() {
     }
 
     // Existing generation logic
-    lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
+    const minD = ev.minDistance ?? 0;
+    const maxD = ev.maxDistance ?? 9999;
+    const reqFlags = flagsToC(ev.requiredFlags);
+    const forbidFlags = flagsToC(ev.forbiddenFlags);
+    lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
 
     (ev.options || []).forEach(opt => {
       const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
@@ -2257,23 +2364,23 @@ function copyCode() {
 // ══════════════════════════════════════════════════════════════════
 const SEED_OX = 3150, SEED_OY = 3710;
 const seed = [
-  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+40 },
-  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+40 },
-  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+40 },
-  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+40 },
-  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+220 },
-  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+220 },
-  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+220 },
-  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+220 },
-  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+400 },
-  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], x: SEED_OX+310, y: SEED_OY+400 },
-  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+580, y: SEED_OY+400 },
-  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+40 },
-  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+1450, y: SEED_OY+40 },
-  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+280 },
-  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], x: SEED_OX+1450, y: SEED_OY+280 },
-  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+540 },
-  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+1450, y: SEED_OY+540 },
+  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+40 },
+  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+40 },
+  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+40 },
+  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+850, y: SEED_OY+40 },
+  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+220 },
+  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+220 },
+  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+220 },
+  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+850, y: SEED_OY+220 },
+  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+400 },
+  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+400 },
+  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+400 },
+  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+40 },
+  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+40 },
+  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+280 },
+  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+280 },
+  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+540 },
+  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+540 },
 ];
 
 // Check for stored history
