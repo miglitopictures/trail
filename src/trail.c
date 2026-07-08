@@ -90,6 +90,8 @@ typedef struct {
     enum RationSize ration;
 } Party;
 
+// Descansar
+// TODO: simular quando comida acabou? 
 void rest(Party *party, int *hours){
     
     for (int i = 0; i < 4; i++){
@@ -113,7 +115,7 @@ typedef struct {
 
     enum State state;
 
-    unsigned int activeFlags; // EVENT BITMASK FOR CONDITIONS/STATES
+    unsigned int activeFlags; // EVENT BITMASK
 
     int currentEvent;
     int checkpointsVisited;
@@ -121,8 +123,8 @@ typedef struct {
 } GameData;
 
 // Event condition flags
-#define COND_NONE          (0)       // 00000000 00000000 00000000 00000000
-// #define COND_NEEDS_SICK    (1 << 0)  // 00000000 00000000 00000000 00000001
+#define COND_NONE           (0)       // 00000000 00000000 00000000 00000000
+// #define COND_SICK          (1 << 0)  // 00000000 00000000 00000000 00000001
 // #define COND_LOW_FOOD      (1 << 1)  // 00000000 00000000 00000000 00000010
 // #define COND_NO_MONEY      (1 << 2)  // 00000000 00000000 00000000 00000100
 // #define COND_NIGHT_TIME    (1 << 3)  // 00000000 00000000 00000000 00001000
@@ -145,8 +147,8 @@ struct Event {
     enum EventType type;
 
     // distance range for event
-    float minDistance;      // Won't trigger before this kilometer mark
-    float maxDistance;      // Won't trigger after this kilometer mark
+    float minDistance;
+    float maxDistance;
     // conditional flags
     unsigned int requiredFlags;
     unsigned int forbiddenFlags;
@@ -366,13 +368,6 @@ int main() {
             game.party.inventory.footwear = 4;
             game.party.money = 70;
             game.party.ration = MEDIUM;
-        }
-
-        if (IsKeyPressed(KEY_F)) {
-            game.currentEvent = EMPTY_HOUSE;
-        }
-        if (IsKeyPressed(KEY_G)) {
-            game.currentEvent = FOUND_STRANGER;
         }
 
         // Save Game
