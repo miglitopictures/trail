@@ -419,6 +419,37 @@ function flagsToC(flagKeys) {
   return `(${flagKeys.join(' | ')})`;
 }
 
+// Computes, from the CURRENT `events` graph, which events are "heads" (no
+// incoming option links — safe for trail.c's refreshEventPool() to roll
+// randomly) vs "leaves" (reached only by walking another event's option),
+// and the old-index → new-index remap that places heads at [0, headCount)
+// and leaves at [headCount, n). This is the SAME numbering generateCode()
+// uses for the actual events[] array — every place the editor displays an
+// event's index (node badges, option target labels, the Preview modal, etc.)
+// routes through this same remap, so what you see in the editor always
+// matches what that event's index will be in the generated code.
+function computeEventOrder() {
+  const n = events.length;
+  const incomingCounts = new Array(n).fill(0);
+  events.forEach(ev => {
+    (ev.options || []).forEach(opt => {
+      if (opt.nextId >= 0 && opt.nextId < n) incomingCounts[opt.nextId]++;
+    });
+  });
+
+  const headIndices = [];
+  const leafIndices = [];
+  events.forEach((ev, i) => {
+    (incomingCounts[i] === 0 ? headIndices : leafIndices).push(i);
+  });
+
+  const remap = new Array(n);
+  headIndices.forEach((oldIdx, pos) => { remap[oldIdx] = pos; });
+  leafIndices.forEach((oldIdx, pos) => { remap[oldIdx] = headIndices.length + pos; });
+
+  return { incomingCounts, headIndices, leafIndices, remap };
+}
+
 function makeEditable(element, initialValue, isTextArea, onSave) {
   const input = document.createElement(isTextArea ? 'textarea' : 'input');
   input.className = isTextArea ? 'inline-edit-textarea' : 'inline-edit-input';
@@ -673,6 +704,11 @@ function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
 
+  // Same head/leaf index numbering generateCode() uses, so the badge shown
+  // on each node always matches what that event's index will be in the
+  // generated events[] array.
+  const { remap } = computeEventOrder();
+
   // 1. Calculate which nodes should be hidden
   const hiddenNodes = new Set();
   groups.forEach(g => {
@@ -706,7 +742,7 @@ function renderCanvas() {
 
     const nIdx = document.createElement('span');
     nIdx.className = 'node-idx';
-    nIdx.textContent = `[${i}]`;
+    nIdx.textContent = `[${remap[i]}]`;
 
     const nTitle = document.createElement('span');
     nTitle.className = 'node-title';
@@ -783,7 +819,7 @@ function renderCanvas() {
         if (opt.nextId === -1) {
           nextLbl.textContent = 'TERM'; nextLbl.style.background = 'rgba(255,255,255,0.05)'; nextLbl.style.color = 'var(--muted)';
         } else {
-          nextLbl.textContent = `→ [${opt.nextId}]`; nextLbl.style.background = 'var(--accent-dim)'; nextLbl.style.color = '#7fc0ff';
+          nextLbl.textContent = `→ [${remap[opt.nextId]}]`; nextLbl.style.background = 'var(--accent-dim)'; nextLbl.style.color = '#7fc0ff';
         }
 
         const outHandle = document.createElement('div');
@@ -1753,6 +1789,7 @@ function toggleFlag(field, key) {
 function renderOptions() {
   const container = document.getElementById('options-container'); container.innerHTML = '';
   const ev = events[selectedIdx];
+  const { remap } = computeEventOrder();
   ev.options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'option-card';
@@ -1760,8 +1797,8 @@ function renderOptions() {
     const optionsHtml = events.map((targetEv, targetIdx) => {
       if (targetIdx === selectedIdx) return '';
       const label = targetEv.define
-        ? `[${targetIdx}] ${targetEv.define}`
-        : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
+        ? `[${remap[targetIdx]}] ${targetEv.define}`
+        : `[${remap[targetIdx]}] ${targetEv.message.substring(0, 26)}...`;
       return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
     }).join('');
     card.innerHTML = `
@@ -1883,9 +1920,10 @@ function renderEventPreviewScreen(idx, { recordHistory = true } = {}) {
 
   const ev = events[idx];
   const cfg = getTypeConfig(ev.type);
+  const { remap } = computeEventOrder();
 
   const breadcrumb = document.getElementById('preview-breadcrumb');
-  const label = ev.define ? `[${idx}] ${ev.define}` : `[${idx}] (no define)`;
+  const label = ev.define ? `[${remap[idx]}] ${ev.define}` : `[${remap[idx]}] (no define)`;
   breadcrumb.innerHTML = `Previewing <span class="crumb-current">${escHtml(label)}</span> — ${escHtml(cfg.label)}`;
 
   const msgBox = document.getElementById('preview-message-box');
@@ -1903,7 +1941,7 @@ function renderEventPreviewScreen(idx, { recordHistory = true } = {}) {
       const btn = document.createElement('button');
       btn.className = 'preview-option-btn' + (opt.nextId === -1 ? ' is-terminal' : '');
       btn.textContent = opt.message || 'Option';
-      btn.title = opt.nextId === -1 ? 'Ends the conversation (Terminal Leaf Node)' : `Links to [${opt.nextId}]`;
+      btn.title = opt.nextId === -1 ? 'Ends the conversation (Terminal Leaf Node)' : `Links to [${remap[opt.nextId]}]`;
       btn.onclick = () => previewChooseOption(idx, opt.nextId);
       optsRow.appendChild(btn);
     });
@@ -2204,63 +2242,127 @@ setPanelCollapsed(localStorage.getItem('vidas_secas_panel_collapsed') === '1');
 // 15. CODE GENERATION & FILE IMPORT/EXPORT
 // ══════════════════════════════════════════════════════════════════
 function generateCode() {
-  // 1. Calculate incoming links for all events
-  const incomingCounts = new Array(events.length).fill(0);
-  events.forEach(ev => {
-    (ev.options || []).forEach(opt => {
-      if (opt.nextId >= 0 && opt.nextId < events.length) {
-        incomingCounts[opt.nextId]++;
-      }
-    });
-  });
+  // 1. Same head/leaf classification and index remap the editor UI uses for
+  // its own node badges/labels — see computeEventOrder() for why.
+  const { incomingCounts, headIndices, leafIndices, remap } = computeEventOrder();
+
+  const numMaxRandomEvents = headIndices.length;
+  const numMaxEvents = Math.max(events.length, 1); // avoid declaring a zero-size array on an empty graph
 
   const lines = [];
-  lines.push(`Event events[${events.length}] = {0};`);
+
+  if (events.length > 0 && numMaxRandomEvents === 0) {
+    lines.push('// ⚠ WARNING: every event has an incoming link — there are no "head" events,');
+    lines.push('//   so the random ambient event pool will always be empty.');
+    lines.push('');
+  }
+
+  lines.push(`#define MAX_EVENTS ${numMaxEvents}`);
+  lines.push(`#define MAX_RANDOM_EVENTS ${numMaxRandomEvents} // Indices 0 to ${Math.max(numMaxRandomEvents - 1, 0)} are "head" events — safe to roll randomly`);
+  lines.push('');
+  lines.push(`Event events[MAX_EVENTS] = {0};`);
   lines.push('');
 
-  // 2. Emit one #define per named event, up front. A #define must appear before
-  // any use in C, and events can link both forward and backward across the
-  // graph, so collecting them all here (rather than scattering them next to
-  // each chain) guarantees the generated code always compiles no matter how
-  // the graph is wired.
+  // 2. Emit one #define per named event, up front, using each event's NEW
+  // (remapped) index so it matches the array slot it actually ends up in —
+  // sorted by that new index so the block reads top-to-bottom in array order.
   const namedEvents = events
     .map((ev, i) => ({ ev, i }))
-    .filter(({ ev }) => !!ev.define);
+    .filter(({ ev }) => !!ev.define)
+    .sort((a, b) => remap[a.i] - remap[b.i]);
   if (namedEvents.length > 0) {
     const maxNameLen = Math.max(...namedEvents.map(({ ev }) => ev.define.length));
     namedEvents.forEach(({ ev, i }) => {
-      lines.push(`#define ${ev.define.padEnd(maxNameLen)} ${i}`);
+      lines.push(`#define ${ev.define.padEnd(maxNameLen)} ${remap[i]}`);
     });
     lines.push('');
   }
 
-  // 3. How a given event index should be *referenced* in generated code —
-  // its #define name if it has one, otherwise the plain numeric index.
-  const ref = (idx) => (idx >= 0 && idx < events.length && events[idx].define) ? events[idx].define : idx;
+  // 3. How a given (original, editor-internal) event index should be
+  // *referenced* in generated code — its #define name if it has one,
+  // otherwise its remapped numeric index (never the raw editor index).
+  const ref = (idx) => (idx >= 0 && idx < events.length && events[idx].define) ? events[idx].define : remap[idx];
 
-  events.forEach((ev, i) => {
-    const comment = ev.define ? `/* ${ev.define} */` : `/* [${i}] */`;
-    const hasOutgoing = ev.options && ev.options.length > 0;
+  // 4. Decide PRINT order separately from the index NUMBERING above: a head
+  // and every event only reachable by walking ITS OWN option chain should be
+  // printed together as one contiguous, single-comment block — even though
+  // numbering-wise the head lives in the low [0, MAX_RANDOM_EVENTS) range and
+  // its leaf descendants live way up in the high range. Walking each head's
+  // options in order (a DFS) and marking nodes as visited handles chains that
+  // loop back on themselves (e.g. an option linking back to an earlier head)
+  // without printing anything twice.
+  const emitted = new Set();
+  const chains = []; // [{ headIdx, nodeIndices: [...] }]
+  function collectChain(startIdx) {
+    const nodeIndices = [];
+    const stack = [startIdx];
+    while (stack.length > 0) {
+      const cur = stack.pop();
+      if (emitted.has(cur)) continue;
+      emitted.add(cur);
+      nodeIndices.push(cur);
+      const opts = events[cur].options || [];
+      for (let k = opts.length - 1; k >= 0; k--) { // push in reverse so DFS visits options in their natural order
+        const nextId = opts[k].nextId;
+        if (nextId >= 0 && nextId < events.length && !emitted.has(nextId)) stack.push(nextId);
+      }
+    }
+    return nodeIndices;
+  }
+  headIndices.forEach(headIdx => {
+    if (emitted.has(headIdx)) return; // already pulled in by an earlier head's chain
+    chains.push({ headIdx, nodeIndices: collectChain(headIdx) });
+  });
+  // Safety net: any leaf never reached from any head (e.g. a cycle made up
+  // entirely of leaves) still needs to be emitted somewhere.
+  const orphanNodeIndices = leafIndices.filter(i => !emitted.has(i));
+  orphanNodeIndices.forEach(i => emitted.add(i));
 
-    // 4. A node starts a chain if it has NO incoming links AND AT LEAST 1 outgoing link
-    if (incomingCounts[i] === 0 && hasOutgoing) {
-      lines.push(`// ---${ev.define ? ev.define : "CHAIN START"}---`);
+  // 5. Emit each chain as one block: a single "// ---NAME---" header (only
+  // when the head actually leads somewhere) followed by every node in that
+  // chain, then a blank line before the next block.
+  chains.forEach(({ headIdx, nodeIndices }) => {
+    const headEv = events[headIdx];
+    const headHasOutgoing = headEv.options && headEv.options.length > 0;
+
+    if (headHasOutgoing) {
+      lines.push(`// ---${headEv.define ? headEv.define : "CHAIN START"}---`);
     }
 
-    // Existing generation logic
-    const minD = ev.minDistance ?? 0;
-    const maxD = ev.maxDistance ?? 9999;
-    const reqFlags = flagsToC(ev.requiredFlags);
-    const forbidFlags = flagsToC(ev.forbiddenFlags);
-    lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
-
-    (ev.options || []).forEach(opt => {
-      const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
-      lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
+    nodeIndices.forEach(i => {
+      const ev = events[i];
+      const comment = ev.define ? `/* ${ev.define} */` : `/* [${remap[i]}] */`;
+      const minD = ev.minDistance ?? 0;
+      const maxD = ev.maxDistance ?? 9999;
+      const reqFlags = flagsToC(ev.requiredFlags);
+      const forbidFlags = flagsToC(ev.forbiddenFlags);
+      lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
+      (ev.options || []).forEach(opt => {
+        const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
+        lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
+      });
     });
 
-    if (hasOutgoing) lines.push('');
+    if (headHasOutgoing) lines.push('');
   });
+
+  if (orphanNodeIndices.length > 0) {
+    lines.push('// ---ORPHANED (has an incoming link, but unreachable from any head — check this chain)---');
+    orphanNodeIndices.forEach(i => {
+      const ev = events[i];
+      const comment = ev.define ? `/* ${ev.define} */` : `/* [${remap[i]}] */`;
+      const minD = ev.minDistance ?? 0;
+      const maxD = ev.maxDistance ?? 9999;
+      const reqFlags = flagsToC(ev.requiredFlags);
+      const forbidFlags = flagsToC(ev.forbiddenFlags);
+      lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
+      (ev.options || []).forEach(opt => {
+        const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
+        lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
+      });
+    });
+    lines.push('');
+  }
 
   document.getElementById('code-output').textContent = lines.join('\n');
 }
