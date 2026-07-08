@@ -355,8 +355,62 @@ function saveState() {
     historyIndex++;
   }
 
-  // Persist to localStorage
-  localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+  persistHistory();
+}
+
+// How much of the undo stack we're willing to write to localStorage, in
+// (rough) bytes. This is deliberately NOT "persist everything" — at ~300
+// events a single snapshot is already ~85KB, so all MAX_HISTORY (128) of
+// them can exceed the ~5-10MB quota most browsers enforce, which makes
+// setItem() throw on every subsequent save. It's also deliberately NOT
+// "persist only the current state" — that avoids the quota problem but
+// throws away the ability to undo anything after a page reload, which is a
+// real feature people rely on, not just a nice-to-have.
+//
+// So instead: persist as many of the MOST RECENT states as fit in this
+// budget, walking backward from the latest one. Small graphs end up
+// persisting most or all of their (smaller) history; large graphs
+// automatically persist fewer, older states get dropped first — either way
+// the write always stays comfortably under quota.
+const PERSIST_BUDGET_BYTES = 2 * 1024 * 1024; // ~2MB
+
+function getPersistableHistoryWindow() {
+  if (historyStack.length === 0) return { stack: [], index: historyIndex };
+
+  // Always include at least the current/latest state, regardless of its own
+  // size, then greedily extend backward through older states as long as
+  // doing so keeps the running total within budget.
+  let startIdx = historyStack.length - 1;
+  let total = historyStack[startIdx].length;
+  for (let i = startIdx - 1; i >= 0; i--) {
+    const next = total + historyStack[i].length;
+    if (next > PERSIST_BUDGET_BYTES) break;
+    total = next;
+    startIdx = i;
+  }
+
+  return {
+    stack: historyStack.slice(startIdx),
+    index: historyIndex - startIdx,
+  };
+}
+
+// Wraps localStorage.setItem with a try/catch — quota errors should degrade
+// gracefully rather than throw up through whatever handler called this.
+function persistHistory() {
+  try {
+    const window = getPersistableHistoryWindow();
+    localStorage.setItem('vidas_secas_history', JSON.stringify(window));
+  } catch (e) {
+    // Even the trimmed window didn't fit (a single state must be enormous) —
+    // fall back to just the current state so a reload at least restores your
+    // latest work, even if cross-reload undo depth is lost this one time.
+    try {
+      localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: [historyStack[historyIndex]], index: 0 }));
+    } catch (e2) {
+      console.warn('Could not persist any state to localStorage (quota exceeded?):', e2);
+    }
+  }
 }
 
 function undo() {
@@ -377,8 +431,7 @@ function undo() {
       selectedLink = null;
       selectedRouter = null;
 
-      // Update LocalStorage index
-      localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+      persistHistory();
 
       // Re-render everything
       renderCanvas();
@@ -888,117 +941,145 @@ function drawConnections() {
     if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
   });
 
+  // 2. READ PASS — look up every node's handles/anchor once (instead of
+  // re-querying the DOM per link) and measure every link's geometry, all
+  // before touching the DOM. Reading getBoundingClientRect and then writing
+  // to the DOM (appendChild) in the same loop iteration forces a synchronous
+  // layout recalculation on EVERY iteration ("layout thrashing") — this can
+  // easily be the difference between a smooth drag and a visibly stuttering
+  // one once there are 100+ connections on screen. Keeping all reads
+  // together means the browser computes layout once for this whole pass,
+  // not once per connection, and all writes happen in one batch afterward.
+  const nodeInfo = new Map(); // idx -> { handles, anchor }
+  nodesLayer.querySelectorAll('.node').forEach(nodeEl => {
+    const idx = parseInt(nodeEl.getAttribute('data-idx'), 10);
+    nodeInfo.set(idx, {
+      handles: nodeEl.querySelectorAll('.node-output-handle'),
+      anchor: nodeEl.querySelector('.node-input-anchor'),
+    });
+  });
+
+  const links = [];
   events.forEach((ev, i) => {
     if (!ev.options) return;
     ev.options.forEach((opt, optIdx) => {
       if (opt.nextId === -1 || !events[opt.nextId]) return;
-
       if (hiddenNodes.has(i) || hiddenNodes.has(opt.nextId)) return;
 
-      const nodeEl = document.querySelector(`.node[data-idx="${i}"]`);
-      const handles = nodeEl?.querySelectorAll('.node-output-handle');
-      const handle = handles?.[optIdx];
-      const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
-      const anchor = targetEl?.querySelector('.node-input-anchor');
+      const fromInfo = nodeInfo.get(i);
+      const toInfo = nodeInfo.get(opt.nextId);
+      const handle = fromInfo?.handles?.[optIdx];
+      const anchor = toInfo?.anchor;
       if (!handle || !anchor) return;
 
       const hRect = handle.getBoundingClientRect();
       const aRect = anchor.getBoundingClientRect();
       const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
       const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
-      const startX = start.x, startY = start.y, endX = end.x, endY = end.y;
 
       if (!opt.routers) opt.routers = [];
-      const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
+      links.push({ i, optIdx, opt, startX: start.x, startY: start.y, endX: end.x, endY: end.y });
+    });
+  });
 
-      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      group.setAttribute('class', 'svg-link-group');
-      group.setAttribute('data-node-idx', i);
-      group.setAttribute('data-opt-idx', optIdx);
+  // 3. WRITE PASS — build everything into fragments and append once each,
+  // instead of appending to the live SVG/nodes-layer inside the loop.
+  const linkFragment = document.createDocumentFragment();
+  const routerFragment = document.createDocumentFragment();
 
-      const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      hitPath.setAttribute('d', pathString);
-      hitPath.setAttribute('class', 'svg-link-hitbox');
+  links.forEach(({ i, optIdx, opt, startX, startY, endX, endY }) => {
+    const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
 
-      const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      visPath.setAttribute('d', pathString);
-      visPath.setAttribute('class', 'svg-link-visible');
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', 'svg-link-group');
+    group.setAttribute('data-node-idx', i);
+    group.setAttribute('data-opt-idx', optIdx);
 
-      const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
-      const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
+    const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hitPath.setAttribute('d', pathString);
+    hitPath.setAttribute('class', 'svg-link-hitbox');
 
-      visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
-      visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
+    const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    visPath.setAttribute('d', pathString);
+    visPath.setAttribute('class', 'svg-link-visible');
 
-      group.appendChild(hitPath);
-      group.appendChild(visPath);
+    const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
+    const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
 
-      group.addEventListener('click', (e) => {
-        if (!e.ctrlKey && !e.metaKey) return;
+    visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
+    visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
+
+    group.appendChild(hitPath);
+    group.appendChild(visPath);
+
+    group.addEventListener('click', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const click = toCanvas(e.clientX, e.clientY);
+      const clickX = click.x, clickY = click.y;
+      if (!opt.routers) opt.routers = [];
+      const newPt = { x: clickX, y: clickY };
+      const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
+      let bestSegIdx = 0, bestDist = Infinity;
+      for (let k = 0; k < allPts.length - 1; k++) {
+        const ax = allPts[k].x, ay = allPts[k].y;
+        const bx = allPts[k+1].x, by = allPts[k+1].y;
+        const dx = bx - ax, dy = by - ay;
+        const lenSq = dx*dx + dy*dy;
+        const t = lenSq > 0 ? Math.max(0, Math.min(1, ((clickX-ax)*dx + (clickY-ay)*dy) / lenSq)) : 0;
+        const closestX = ax + t*dx, closestY = ay + t*dy;
+        const dist = Math.hypot(clickX - closestX, clickY - closestY);
+        if (dist < bestDist) { bestDist = dist; bestSegIdx = k; }
+      }
+      opt.routers.splice(bestSegIdx, 0, newPt);
+      drawConnections();
+    });
+
+    group.addEventListener('mousedown', (e) => {
+      if (e.ctrlKey || e.metaKey) return;
+      e.stopPropagation();
+      selectedLink = { nodeIdx: i, optionIdx: optIdx };
+      selectedRouter = null;
+      selectEvent(null);
+    });
+
+    linkFragment.appendChild(group);
+
+    opt.routers.forEach((router, routerIdx) => {
+      const isSelRouter = selectedRouter &&
+        selectedRouter.nodeIdx === i &&
+        selectedRouter.optionIdx === optIdx &&
+        selectedRouter.routerIdx === routerIdx;
+
+      const rdiv = document.createElement('div');
+      rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
+      rdiv.style.left = `${router.x}px`;
+      rdiv.style.top = `${router.y}px`;
+      rdiv.setAttribute('data-node-idx', i);
+      rdiv.setAttribute('data-opt-idx', optIdx);
+      rdiv.setAttribute('data-router-idx', routerIdx);
+
+      rdiv.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        const click = toCanvas(e.clientX, e.clientY);
-        const clickX = click.x, clickY = click.y;
-        if (!opt.routers) opt.routers = [];
-        const newPt = { x: clickX, y: clickY };
-        const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
-        let bestSegIdx = 0, bestDist = Infinity;
-        for (let k = 0; k < allPts.length - 1; k++) {
-          const ax = allPts[k].x, ay = allPts[k].y;
-          const bx = allPts[k+1].x, by = allPts[k+1].y;
-          const dx = bx - ax, dy = by - ay;
-          const lenSq = dx*dx + dy*dy;
-          const t = lenSq > 0 ? Math.max(0, Math.min(1, ((clickX-ax)*dx + (clickY-ay)*dy) / lenSq)) : 0;
-          const closestX = ax + t*dx, closestY = ay + t*dy;
-          const dist = Math.hypot(clickX - closestX, clickY - closestY);
-          if (dist < bestDist) { bestDist = dist; bestSegIdx = k; }
-        }
-        opt.routers.splice(bestSegIdx, 0, newPt);
+        selectedRouter = { nodeIdx: i, optionIdx: optIdx, routerIdx };
+        selectedLink = null;
+        selectEvent(null);
+        draggingRouter = {
+          nodeIdx: i, optionIdx: optIdx, routerIdx,
+          offsetX: e.clientX / zoom - router.x,
+          offsetY: e.clientY / zoom - router.y
+        };
         drawConnections();
       });
 
-      group.addEventListener('mousedown', (e) => {
-        if (e.ctrlKey || e.metaKey) return;
-        e.stopPropagation();
-        selectedLink = { nodeIdx: i, optionIdx: optIdx };
-        selectedRouter = null;
-        selectEvent(null);
-      });
-
-      svg.appendChild(group);
-
-      opt.routers.forEach((router, routerIdx) => {
-        const isSelRouter = selectedRouter &&
-          selectedRouter.nodeIdx === i &&
-          selectedRouter.optionIdx === optIdx &&
-          selectedRouter.routerIdx === routerIdx;
-
-        const rdiv = document.createElement('div');
-        rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
-        rdiv.style.left = `${router.x}px`;
-        rdiv.style.top = `${router.y}px`;
-        rdiv.setAttribute('data-node-idx', i);
-        rdiv.setAttribute('data-opt-idx', optIdx);
-        rdiv.setAttribute('data-router-idx', routerIdx);
-
-        rdiv.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          selectedRouter = { nodeIdx: i, optionIdx: optIdx, routerIdx };
-          selectedLink = null;
-          selectEvent(null);
-          draggingRouter = {
-            nodeIdx: i, optionIdx: optIdx, routerIdx,
-            offsetX: e.clientX / zoom - router.x,
-            offsetY: e.clientY / zoom - router.y
-          };
-          drawConnections();
-        });
-
-        nodesLayer.appendChild(rdiv);
-      });
+      routerFragment.appendChild(rdiv);
     });
   });
+
+  svg.appendChild(linkFragment);
+  nodesLayer.appendChild(routerFragment);
 
   if (activeLinkDrag) {
     const cp1X = activeLinkDrag.startX + 70;
@@ -1811,7 +1892,7 @@ function renderOptions() {
           </svg>
         </span>
         <span class="option-num">${i + 1}</span>
-        <input type="text" value="${escHtml(opt.message)}" oninput="updateOptionData(${i}, 'message', this.value)">
+        <input type="text" value="${escHtml(opt.message)}" oninput="onOptionMessageInput(${i}, this.value)" onchange="updateOptionData(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -1833,6 +1914,20 @@ function updateOptionData(optIdx, field, value) {
     events[selectedIdx].options[optIdx][field] = value;
     renderCanvas(); generateCode();
     saveState();
+}
+
+// Cheap live update while typing an option's message: just update the data
+// model and the small text preview on the canvas node directly, skipping the
+// full renderCanvas()/generateCode()/saveState() cycle updateOptionData()
+// does. That expensive chain (which tears down and rebuilds every node,
+// regenerates all the C code, and JSON-stringifies the whole graph) only
+// needs to run once you're actually done typing — see the input's onchange
+// handler, which still calls updateOptionData() on blur.
+function onOptionMessageInput(optIdx, value) {
+  events[selectedIdx].options[optIdx].message = value;
+  const nodeEl = document.querySelector(`.node[data-idx="${selectedIdx}"]`);
+  const optTxt = nodeEl?.querySelectorAll('.node-opt-text')[optIdx];
+  if (optTxt) optTxt.textContent = `${optIdx + 1}. ${value || 'Option'}`;
 }
 
 function addOption() {
@@ -2215,7 +2310,7 @@ function setPanelCollapsed(collapsed) {
   const reopenBtn = document.getElementById('panel-reopen-btn');
   toggleBtn.title = collapsed ? 'Open panel' : 'Close panel';
   reopenBtn.title = 'Expand panel';
-  localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0');
+  try { localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0'); } catch (e) { /* non-critical */ }
   updateCanvasPreviewButton();
 }
 
@@ -2485,20 +2580,25 @@ const seed = [
   { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+540 },
 ];
 
-// Check for stored history
+// Check for stored history — this holds a recent WINDOW of states (see
+// getPersistableHistoryWindow()), not the full in-session MAX_HISTORY worth,
+// so a reload restores as much undo depth as fit in the size budget rather
+// than either the full history (which is what blew the localStorage quota
+// in the first place) or none at all (which just breaks undo across reloads).
 const storedHistory = localStorage.getItem('vidas_secas_history');
 if (storedHistory) {
   const parsedHistory = JSON.parse(storedHistory);
-  historyStack = parsedHistory.stack;
-  historyIndex = parsedHistory.index;
-  
-  // Load the current active state
+  historyStack = parsedHistory.stack || [];
+  historyIndex = parsedHistory.index ?? (historyStack.length - 1);
+
   const currentStateStr = historyStack[historyIndex];
   if (currentStateStr) {
     const parsedState = JSON.parse(currentStateStr);
     events = parsedState.events || [];
     groups = parsedState.groups || [];
     groupIdCounter = parsedState.groupIdCounter || 0;
+    if (parsedState.zoom !== undefined) zoom = parsedState.zoom;
+    if (parsedState.panX !== undefined) { panX = parsedState.panX; panY = parsedState.panY; }
   }
 } else {
   // If no history, load the default seed
