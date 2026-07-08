@@ -1608,6 +1608,7 @@ window.onmousemove = (e) => {
       opt.routers[routerIdx].y = snapToGrid(e.clientY / zoom - offsetY);
       const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
       if (rdiv) { rdiv.style.left = `${opt.routers[routerIdx].x}px`; rdiv.style.top = `${opt.routers[routerIdx].y}px`; }
+      renderGroups();
       drawConnections();
     }
   } else if (draggingNodeIdx !== null) {
