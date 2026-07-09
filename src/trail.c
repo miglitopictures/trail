@@ -715,8 +715,7 @@ int main() {
                     DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
                 }
 
-                // Draw dog status bar (dog health)
-                {
+                { // Draw dog status bar (dog health)
                     int size = 30;
                     int posY = windowHeight - 200;
                     Color textColor = game.party.dog.health == 0 ? RED : WHITE;
@@ -774,9 +773,8 @@ int main() {
 
                             DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
                         }
-
-                        // Draw dog status bar (dog health)
-                        {
+                                                
+                        { // Draw dog status bar (dog health)
                             int size = 30;
                             int posY = windowHeight - 300;
                             Color textColor = game.party.dog.health == 0 ? RED : WHITE;
