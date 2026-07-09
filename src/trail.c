@@ -4,6 +4,9 @@
 #include <string.h>
 #include <time.h>
 
+// The Assassination of Whale the Dog
+// Vidas Sequias
+
 // external (raysan5)
 #include "raylib.h"
 #include "raymath.h"
@@ -223,17 +226,11 @@ unsigned int updateActiveFlags(GameData *game){
 
     unsigned int flags = COND_NONE;
     
-    if (game->party.inventory.food < game->party.ration * game->party.count) {
-        flags = flags | COND_LOW_FOOD;
-    }
+    if (game->party.inventory.food < game->party.ration * game->party.count) flags |= COND_LOW_FOOD;
 
-    if (game->party.money < 5) {
-        flags = flags | COND_LOW_MONEY;
-    }
+    if (game->party.money < 5)  flags |= COND_LOW_MONEY;
 
-    if (game->party.count == 1) {
-        flags = flags | COND_ALONE;
-    }
+    if (game->party.count == 1) flags |= COND_ALONE;
 
     if (game->party.dog.dead) {
         flags = flags | COND_DOGLESS;
@@ -257,9 +254,9 @@ void refreshEventPool(float currentDistance, unsigned int activeFlags) {
 
         if (e->message[0] == '\0') continue; // skip empty events
 
-        // Gating conditions
+        // conditional checks for flags and distance range
         if (currentDistance < e->minDistance || currentDistance > e->maxDistance) continue;
-        if ((activeFlags & e->requiredFlags) != e->requiredFlags) continue; // should it be equal or have at least the required??
+        if ((activeFlags & e->requiredFlags) != e->requiredFlags) continue;
         if ((activeFlags & e->forbiddenFlags) != 0) continue;
 
         // Add to active pool
@@ -290,56 +287,59 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory
 
 int main() {
     //*___SETUP___*//
-    // add checkpoints
-    // (Inventory) {food, ammo, weapon, footwear}
-    Checkpoints checkpoints = {0};
-    addCheckpoint(&checkpoints, "Petrolina",           30, (Inventory){50, 200,  10, 40});
-    addCheckpoint(&checkpoints, "Serra Talhada",       50, (Inventory){50, 200,  10, 10});
-    addCheckpoint(&checkpoints, "Carnabeira da Penha", 80, (Inventory){15, 249, 100, 23});
-
-    // creating event list
-    events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[4] = createEvent("Longo dia...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
-    events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
-    // eventEmptyHouse
-    #define EMPTY_HOUSE        11
-
-    events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
-    addOption(&events[EMPTY_HOUSE], "Enter", 32);
-    addOption(&events[EMPTY_HOUSE], "Go Away", -1);
-
-    events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-
-    // eventFoundStranger
-    #define FOUND_STRANGER  12
-
-    events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[FOUND_STRANGER], "Talk",     33);
-    addOption(&events[FOUND_STRANGER], "Go Away",  -1);
     
-    events[33] = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[33], "Sim",           34);
-    addOption(&events[33], "Não responder", -1);
-
-    events[34]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-    addOption(&events[34], "Seguir",         35);
-    addOption(&events[34], "Deixar pra lá", -1);
-    
-    events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
-
-    // eventEmptyHouse
-    #define DOG_FOUND_FOOD        13
-    events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+    Checkpoints checkpoints = {0}; 
+    {  // add checkpoints data
+        addCheckpoint(&checkpoints, "Petrolina",           30, (Inventory){50, 200,  10, 40});
+        addCheckpoint(&checkpoints, "Serra Talhada",       50, (Inventory){50, 200,  10, 10});
+        addCheckpoint(&checkpoints, "Carnabeira da Penha", 80, (Inventory){15, 249, 100, 23});
+        // (Inventory) {food, ammo, weapon, footwear}
+    }
 
 
+    { // populating the event list
+        events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[3] = createEvent("Um cachorro mendigo olha estranho para vocês.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[4] = createEvent("Longo dia...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+        events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+        // eventEmptyHouse
+        #define EMPTY_HOUSE        11
+
+        events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
+        addOption(&events[EMPTY_HOUSE], "Enter", 32);
+        addOption(&events[EMPTY_HOUSE], "Go Away", -1);
+
+        events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+
+        // eventFoundStranger
+        #define FOUND_STRANGER  12
+
+        events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        addOption(&events[FOUND_STRANGER], "Talk",     33);
+        addOption(&events[FOUND_STRANGER], "Go Away",  -1);
+        
+        events[33] = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        addOption(&events[33], "Sim",           34);
+        addOption(&events[33], "Não responder", -1);
+
+        events[34]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        addOption(&events[34], "Seguir",         35);
+        addOption(&events[34], "Deixar pra lá", -1);
+        
+        events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+
+        // eventEmptyHouse
+        #define DOG_FOUND_FOOD        13
+        events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+
+    }
 
     // setup gameplay data
     GameData game = {0};
@@ -471,63 +471,65 @@ int main() {
                 float velocityParty = 0;
                 int hoursSimulated = 3;
 
-                // people simulate
-                game.party.count = 0;
-                for (int i = 0; i < 4; i++) {
+                if (game.party.count > 0){ // people simulate
 
-                    if (game.party.member[i].dead) continue;
-
-                    // eat
-                    bool couldEat = game.party.inventory.food >= game.party.ration;
-                    if (couldEat) {
-                        game.party.inventory.food -= game.party.ration; // decrement total food
-                    } else {
-                        game.party.inventory.food = 0;
-                    }; 
-                
-                    // simulate sickness
-                    if (!game.party.member[i].sick && game.party.member[i].energy < 70){
-                        int roll = GetRandomValue(1,100);
-                        int chanceOfSickness = game.party.member[i].energy < 30 ? 10 : 3;
-                        if (roll < chanceOfSickness){
-                            game.party.member[i].sick = true;
+                    game.party.count = 0;
+                    for (int i = 0; i < 4; i++) {
+    
+                        if (game.party.member[i].dead) continue;
+    
+                        // eat
+                        bool couldEat = game.party.inventory.food >= game.party.ration;
+                        if (couldEat) {
+                            game.party.inventory.food -= game.party.ration; // decrement total food
+                        } else {
+                            game.party.inventory.food = 0;
+                        }; 
+                    
+                        // simulate sickness
+                        if (!game.party.member[i].sick && game.party.member[i].energy < 70){
+                            int roll = GetRandomValue(1,100);
+                            int chanceOfSickness = game.party.member[i].energy < 30 ? 10 : 3;
+                            if (roll < chanceOfSickness){
+                                game.party.member[i].sick = true;
+                            }
+                        } else {
+                            int roll = GetRandomValue(0,100);
+                            if (roll < 10){
+                                game.party.member[i].sick = false;
+                            }
                         }
-                    } else {
-                        int roll = GetRandomValue(0,100);
-                        if (roll < 10){
-                            game.party.member[i].sick = false;
-                        }
+    
+                        // simulate energy loss
+                        game.party.member[i].energy -= GetRandomValue(3,15);
+                        game.party.member[i].energy = clampInt(game.party.member[i].energy, 0, 100);
+    
+                        // simulate health loss (damage)
+                        bool isSick = game.party.member[i].sick;
+                        int damage = GetRandomValue(isSick || !couldEat ? 1 : 0, 5);
+                        damage = damage * (isSick ? 2 : 1); // if sick
+                        damage = damage * (game.party.member[i].energy == 0 ? 2 : 1); // if exausted
+                        damage = damage * (4 - game.party.ration); // ration size dependent health
+                        damage = damage * (couldEat? 1 : 2);
+    
+                        game.party.member[i].health -= damage;
+                        if (game.party.member[i].health <= 0) {
+                            game.party.member[i].health = 0;
+                            game.party.member[i].dead = true;
+                            continue;
+                        } // clamp health to zero 0
+    
+                        // its aliveee (contando os vivos)
+                        game.party.count++;
+    
+                        // soma velocidades para gerar media
+                        velocityParty += game.party.member[i].velocity * ((float) game.party.member[i].health / (float) 100) * ((float) game.party.member[i].energy / (float) 100);                        
                     }
-
-                    // simulate energy loss
-                    game.party.member[i].energy -= GetRandomValue(3,15);
-                    game.party.member[i].energy = clampInt(game.party.member[i].energy, 0, 100);
-
-                    // simulate health loss (damage)
-                    bool isSick = game.party.member[i].sick;
-                    int damage = GetRandomValue(isSick || !couldEat ? 1 : 0, 5);
-                    damage = damage * (isSick ? 2 : 1); // if sick
-                    damage = damage * (game.party.member[i].energy == 0 ? 2 : 1); // if exausted
-                    damage = damage * (4 - game.party.ration); // ration size dependent health
-                    damage = damage * (couldEat? 1 : 2);
-
-                    game.party.member[i].health -= damage;
-                    if (game.party.member[i].health <= 0) {
-                        game.party.member[i].health = 0;
-                        game.party.member[i].dead = true;
-                        continue;
-                    } // clamp health to zero 0
-
-                    // its aliveee (contando os vivos)
-                    game.party.count++;
-
-                    // soma velocidades para gerar media
-                    velocityParty += game.party.member[i].velocity * ((float) game.party.member[i].health / (float) 100) * ((float) game.party.member[i].energy / (float) 100);                        
                 }
 
                 
 
-                { // simulate dog
+                if (!game.party.dog.dead){ // simulate dog
                     // simulate dog sickness
                     if (!game.party.dog.sick){
                         int roll = GetRandomValue(1,100);
@@ -541,17 +543,6 @@ int main() {
                             game.party.dog.sick = false;
                         }
                     }
-
-                    //// game.party.dog.foundFood = false;
-                    //// simulate dog scavanging (wondering around)
-                    //// {
-                    ////     int roll = GetRandomValue(1,100);
-                    ////     int chanceOfFindingFood = 5;
-                    ////     if (roll < chanceOfFindingFood){
-                    ////         game.party.inventory.food += 4;
-                    ////         game.party.dog.foundFood = true;
-                    ////     }
-                    //// }
 
                     // simulate health loss (damage)
                     bool isSick = game.party.dog.sick;
@@ -684,7 +675,7 @@ int main() {
                 }
             }
             
-            if (game.state == STATE_PLAYING || game.state == STATE_EVENT) {// Moving?
+            if (game.state == STATE_PLAYING || game.state == STATE_EVENT) {
                 
                 { // Draw action text -- "Moving" : "Enter to continue"
                     int size = 30;
