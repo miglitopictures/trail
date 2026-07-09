@@ -144,13 +144,13 @@ typedef struct {
 #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
 #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
 #define COND_DOGLESS      (1 << 3)
-#define COND_NIGHT        (1 << 4)
-#define COND_SLEEPLESS    (1 << 5)
-#define COND_VERY_HOT     (1 << 6)
-#define COND_RAIN         (1 << 7)
-#define COND_FLOOD        (1 << 8)
-#define COND_SICK_DOG     (1 << 9)  // evento sacrificio de baleia
-#define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
+#define COND_SICK_DOG     (1 << 4)  // evento sacrificio de baleia
+// #define COND_VERY_HOT     (1 << 5)
+// #define COND_RAIN         (1 << 6)
+// #define COND_FLOOD        (1 << 7)
+// #define COND_NIGHT        (1 << 8)
+// #define COND_SLEEPLESS    (1 << 9)
+// #define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
 
 
 enum EventType {
@@ -221,18 +221,6 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
 
 unsigned int updateActiveFlags(GameData *game){
 
-    //// #define COND_NONE         (0)       // 00000000 00000000 00000000 00000000
-    //// #define COND_LOW_FOOD     (1 << 0)  // 00000000 00000000 00000000 00000010
-    //// #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
-    //// #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
-    //// #define COND_DOGLESS      (1 << 3)
-    // #define COND_NIGHT        (1 << 4)
-    // #define COND_SLEEPLESS    (1 << 5)
-    // #define COND_VERY_HOT     (1 << 6)
-    // #define COND_RAIN         (1 << 7)
-    // #define COND_FLOOD        (1 << 8)
-    //// #define COND_SICK_DOG     (1 << 9)  // evento sacrificio de baleia
-    // #define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
     unsigned int flags = COND_NONE;
     
     if (game->party.inventory.food < game->party.ration * game->party.count) {
@@ -346,6 +334,11 @@ int main() {
     addOption(&events[34], "Deixar pra lá", -1);
     
     events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+
+    // eventEmptyHouse
+    #define DOG_FOUND_FOOD        13
+    events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+
 
 
     // setup gameplay data
@@ -803,7 +796,6 @@ int main() {
                                 
                             } else if (game.party.dog.sick) {
                                 DrawText("(sick)", 310, posY, 30, textColor);
-                                
                             }
                         }
                         
