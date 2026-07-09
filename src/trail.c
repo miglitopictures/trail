@@ -109,7 +109,7 @@ void rest(Party *party, int *hours){
 }
 
 typedef struct {
-    int weather;
+    int weather; // TODO: simulate weather
     int hours;
     float distance;
 
@@ -123,11 +123,13 @@ typedef struct {
 } GameData;
 
 // Event condition flags
-#define COND_NONE      (0)       // 00000000 00000000 00000000 00000000
-// #define COND_LOW_FOOD  (1 << 0)  // 00000000 00000000 00000000 00000010
-// #define COND_LOW_MONEY  (1 << 0)  // 00000000 00000000 00000000 00000010
-// #define COND_ALONE     (1 << 1)  // 00000000 00000000 00000000 00000100 ...
-// #define COND_          (1 << 2) 
+#define COND_NONE         (0)       // 00000000 00000000 00000000 00000000
+#define COND_LOW_FOOD     (1 << 0)  // 00000000 00000000 00000000 00000010
+#define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
+#define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
+#define COND_NIGHT        (1 << 3)
+#define COND_VERY_HOT     (1 << 4)
+#define COND_RAIN         (1 << 5)
 
 enum EventType {
     EVENT_MESSAGE,
