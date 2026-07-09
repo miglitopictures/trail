@@ -34,6 +34,11 @@
       <rect x="10.3" y="2.5" width="4.2" height="11" rx="0" fill="currentColor" opacity="0.18"/>
     </svg>
   </button>
+  <button class="canvas-preview-btn" id="canvas-preview-btn" onclick="openEventPreview()" title="Preview selected event">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M4.5 3.2v9.6c0 .7.77 1.13 1.36.76l7.4-4.8a.9.9 0 0 0 0-1.52l-7.4-4.8A.9.9 0 0 0 4.5 3.2Z" fill="currentColor"/>
+    </svg>
+  </button>
   <div class="canvas-actions">
     <button class="canvas-btn canvas-btn-primary" onclick="newEvent()" title="Add Story Node">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="7" y="2" width="2" height="12" rx="1" fill="currentColor"/><rect x="2" y="7" width="12" height="2" rx="1" fill="currentColor"/></svg>
@@ -50,6 +55,10 @@
     </button>
     <button class="canvas-btn" id="grid-snap-btn" onclick="toggleGridSnap()" title="Toggle Grid Snap">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="3" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="3" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="3" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="8" cy="13" r="1.2" fill="currentColor" opacity="0.4"/><circle cx="13" cy="13" r="1.2" fill="currentColor" opacity="0.4"/></svg>
+    </button>
+    <div class="canvas-btn-divider"></div>
+    <button class="canvas-btn" onclick="openSpotlight()" title="Quick Search Nodes (Ctrl+K)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.8" cy="6.8" r="4.3" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     </button>
     <div class="canvas-btn-divider"></div>
     <button class="canvas-btn" onclick="openHelp()" title="Help & Shortcuts">
@@ -73,8 +82,7 @@
   </div>
   <div class="panel-content active" id="panel-edit">
     <div class="empty-state" id="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; gap: 8px;">
-      <div style="font-size: 36px;">🖱️</div>
-      <div>Click any card node on the canvas layout workspace grid to adjust configuration settings values</div>
+      <div>Click any node to adjust settings</div>
     </div>
     <div id="event-form" style="display:none">
       <div class="field-group">
@@ -90,7 +98,27 @@
         <div class="type-selector" id="type-selector-container"></div>
       </div>
       <div class="field-group">
-        <div class="field-label">Options Layout Config Matrix</div>
+        <div class="field-label">Distance Gate (km) <span class="field-label-hint">— won't roll outside this range</span></div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="number" id="f-min-distance" step="1" style="flex:1;" onchange="onFieldChange()">
+          <span style="color:var(--muted); font-size:12px;">to</span>
+          <input type="number" id="f-max-distance" step="1" style="flex:1;" onchange="onFieldChange()">
+        </div>
+        <div class="field-warning" id="f-distance-warning"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Required Flags <span class="field-label-hint">(ALL must be active)</span></div>
+        <div class="flag-chip-row" id="required-flags-container"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Forbidden Flags <span class="field-label-hint">(NONE may be active)</span></div>
+        <div class="flag-chip-row forbidden" id="forbidden-flags-container"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label-row">
+          <div class="field-label">Options Layout Config Matrix</div>
+          <button class="btn btn-sm btn-primary" id="preview-event-btn" onclick="openEventPreview()" style="display:none;">▶ Preview Event</button>
+        </div>
         <div id="options-container"></div>
         <button class="btn btn-sm" id="add-option-btn" onclick="addOption()" style="margin-top: 4px;">+ Insert Option Branch Pathway</button>
       </div>
@@ -122,6 +150,7 @@
         <div class="help-row"><kbd>Drag canvas</kbd><span>Pan the workspace</span></div>
         <div class="help-row"><kbd>Scroll</kbd><span>Zoom in / out</span></div>
         <div class="help-row"><kbd>F</kbd><span>Fit all nodes to screen</span></div>
+        <div class="help-row"><kbd>Ctrl K</kbd><span>Quick search / jump to a node</span></div>
         <div class="help-row"><kbd>Ctrl +</kbd><span>Zoom in</span></div>
         <div class="help-row"><kbd>Ctrl −</kbd><span>Zoom out</span></div>
         <div class="help-row"><kbd>Ctrl 0</kbd><span>Reset zoom to 100%</span></div>
@@ -135,6 +164,7 @@
         <div class="help-row"><kbd>Ctrl D</kbd><span>Duplicate selected node(s)</span></div>
         <div class="help-row"><kbd>Delete / Backspace</kbd><span>Delete selected node or link</span></div>
         <div class="help-row"><kbd>Ctrl Z</kbd><span>Undo</span></div>
+        <div class="help-row"><kbd>Ctrl Shift Z</kbd><span>Redo</span></div>
         <div class="help-row"><kbd>⋮⋮ in Properties Panel</kbd><span>Drag to reorder option branches</span></div>
       </div>
 
@@ -163,13 +193,100 @@
   </div>
 </div>
 
+<!-- Spotlight Search — quick-jump to any node by define name, message text, type, or flag -->
+<div id="spotlight-overlay" class="help-overlay spotlight-overlay" onclick="closeSpotlight(event)">
+  <div class="spotlight-modal" onclick="event.stopPropagation()">
+    <div class="spotlight-input-row">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="spotlight-input-icon"><circle cx="6.8" cy="6.8" r="4.3" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input type="text" id="spotlight-input" class="spotlight-input" placeholder="Search nodes by name, message, type, or flag…" autocomplete="off" spellcheck="false" oninput="onSpotlightInput()" onkeydown="onSpotlightKeydown(event)">
+    </div>
+    <div class="spotlight-results" id="spotlight-results"></div>
+    <div class="spotlight-hint">
+      <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+      <span><kbd>Enter</kbd> Jump to node</span>
+      <span><kbd>Esc</kbd> Close</span>
+    </div>
+  </div>
+</div>
+
+<!-- Event Preview Modal — mocks the in-game STATE_EVENT screen from main.c -->
+<div id="event-preview-overlay" class="help-overlay" onclick="closeEventPreview(event)">
+  <div class="help-modal preview-modal">
+    <div class="help-header">
+      <span class="help-title">Event Preview</span>
+      <div class="preview-header-actions">
+        <button class="btn btn-sm" id="preview-back-btn" onclick="previewGoBack()" style="display:none;">← Back</button>
+        <button class="btn btn-sm" id="preview-restart-btn" onclick="previewRestart()" style="display:none;">⟲ Restart</button>
+        <button class="help-close" onclick="closeEventPreview()">&times;</button>
+      </div>
+    </div>
+    <div class="help-body preview-body">
+      <div class="preview-breadcrumb" id="preview-breadcrumb"></div>
+      <div class="preview-screen" id="preview-screen">
+        <div class="preview-message-box" id="preview-message-box"></div>
+        <div class="preview-options-row" id="preview-options-row"></div>
+        <div class="preview-hint" id="preview-hint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+// Vidas Secas — Event Editor
+// A visual node-graph editor for authoring the game's branching story events.
+// Each "event" is a card with a message and up to 4 options; options can link
+// to another event (by index) or terminate the branch. The whole graph is
+// exported as C initializer arrays for the game to consume.
+//
+// Layout of this file:
+//   1. Config & event-type definitions
+//   2. Global state
+//   3. Undo / redo history
+//   4. General utilities
+//   5. Help modal
+//   6. Groups (visual frames around related nodes)
+//   7. Canvas rendering (nodes + connections)
+//   8. Knife tool (cut connections by drawing a line across them)
+//   9. Canvas input handling (pan, zoom, select, drag, marquee, quick-connect)
+//   10. Properties panel (right sidebar form for the selected event)
+//   11. Event preview modal (playtest a branch from the Properties Panel)
+//   12. Option reordering (drag handle in the Properties Panel)
+//   13. Node actions (duplicate, tidy up, grid snap, create/delete)
+//   14. Right panel tabs & collapse toggle
+//   15. Code generation & file import/export
+//   16. Bootstrap (seed data + initial load)
+
+// ══════════════════════════════════════════════════════════════════
+// 1. CONFIG & EVENT-TYPE DEFINITIONS
+// ══════════════════════════════════════════════════════════════════
 const EVENT_TYPES = {
   'EVENT_MESSAGE': { label: 'Message', short: 'MSG', bg: 'rgba(48,209,88,0.15)', fg: '#30d158', border: 'rgba(48,209,88,0.35)' },
   'EVENT_DETOUR':  { label: 'Detour',  short: 'DET', bg: 'rgba(255,159,10,0.15)', fg: '#ff9f0a', border: 'rgba(255,159,10,0.35)' },
 //   'EVENT_COMBAT':  { label: 'Combat',  short: 'CBT', bg: 'rgba(255,69,58,0.15)',  fg: '#ff453a', border: 'rgba(255,69,58,0.35)' },
 //   'EVENT_REWARD':  { label: 'Reward',  short: 'RWD', bg: 'rgba(94,92,230,0.15)',  fg: '#5e5ce6', border: 'rgba(94,92,230,0.35)' }
 };
+
+// Event condition flags — mirrors the "// Event condition flags" #define block
+// in trail.c (COND_NONE plus the commented-out COND_x bitmask list).
+//
+// To add a new flag once you wire it up in C: add one entry below (key must
+// match the #define name exactly) and uncomment/add its #define in trail.c.
+// Nothing else in the editor needs to change — the Required/Forbidden Flags
+// checklists in the Properties Panel and the generated C expressions
+// (e.g. `(COND_LOW_FOOD | COND_NIGHT_TIME)`) both derive from this list
+// automatically, same as adding a new EVENT_TYPES entry above.
+//
+// `bit` is display-only (shown in the chip's tooltip so it's easy to keep in
+// sync with trail.c's `(1 << n)` comments) — the generated code always
+// references flags by name, never by numeric value, so bit assignment in C
+// can change freely without ever touching this editor.
+const CONDITION_FLAGS = [
+  { key: 'COND_NEEDS_SICK', label: 'Party Member Sick', bit: 0 },
+  { key: 'COND_LOW_FOOD',   label: 'Low Food',          bit: 1 },
+  { key: 'COND_NO_MONEY',   label: 'No Money',          bit: 2 },
+  { key: 'COND_NIGHT_TIME', label: 'Night Time',        bit: 3 },
+  { key: 'COND_IN_DESERT',  label: 'In Desert',         bit: 4 },
+];
 
 const GROUP_COLORS = [
   { border: 'rgba(94,92,230,0.6)',  bg: 'rgba(94,92,230,0.06)',  label: 'rgba(94,92,230,0.18)',  text: '#a09ef5' },
@@ -180,53 +297,75 @@ const GROUP_COLORS = [
   { border: 'rgba(255,100,180,0.6)',bg: 'rgba(255,100,180,0.06)',label: 'rgba(255,100,180,0.18)',text: '#ff80c0' },
 ];
 
+// ══════════════════════════════════════════════════════════════════
+// 2. GLOBAL STATE
+// ══════════════════════════════════════════════════════════════════
+
+// ── Story graph data ──
 let events = [];
 let groups = [];   // { id, name, colorIdx, nodeIndices[] }
 let groupIdCounter = 0;
 
+// ── Selection state ──
 let selectedIdx = null;
 let selectedIndices = new Set();  // multi-selection
 let selectedLink = null;
 let selectedRouter = null;
 let selectedGroupId = null;
 
+// ── Canvas viewport — pan & zoom ──
 const CANVAS_SIZE = 8000; // Virtual canvas dimensions — large enough to never clip connections
 const ZOOM_MIN = 0.1, ZOOM_MAX = 2, ZOOM_STEP = 0.12;
 let panX = 0, panY = 0;  // Will be set to center on init
 let zoom = 1;
 let isPanning = false, startPanX = 0, startPanY = 0;
+
+// Camera position is persisted independently of the undo/redo history (see
+// persistViewport()) — it's "where you're looking", not "what you did", so it
+// shouldn't jump around as a side-effect of undoing/redoing content edits.
+const VIEWPORT_KEY = 'vidas_secas_viewport';
+
+// ── Node dragging (single node & multi-select) ──
 let draggingNodeIdx = null, dragOffsetX = 0, dragOffsetY = 0;
 let draggingMulti = false, multiDragOffsets = [];
+
+// ── Connection dragging / easy-create-on-drop ──
 let activeLinkDrag = null;
 let draggingRouter = null;
-
-// Easy-create: ghost node preview when dragging a connection to empty canvas
 const EASY_CREATE_THRESHOLD = 30; // px in canvas units before ghost appears
 let easyCreateGhost = null; // DOM element for the ghost preview
 
-// Marquee selection
+// ── Marquee (box select) ──
 let isMarquee = false, marqueeStartX = 0, marqueeStartY = 0;
 
-// Knife tool (Ctrl + drag to cut connections)
+// ── Knife tool (Ctrl + drag to cut connections) ──
 let isKnifing = false, knifeStartX = 0, knifeStartY = 0;
 
-// Group dragging
+// ── Group dragging ──
 let draggingGroupId = null, groupDragOffsets = [];
 let groupRouterOffsets = [];
 let multiRouterOffsets = [];
 
-// Grid snapping
+// ── Grid snapping ──
 let gridSnapEnabled = false;
 const GRID_SIZE = 20;
 
-// ── HISTORY MANAGEMENT (UNDO) ──
+// ── Undo / redo history ──
 const MAX_HISTORY = 128; // Keeps up to 20 states
 let historyStack = [];
 let historyIndex = -1;
 
+// ── Option reordering (drag handle in the Properties Panel) ──
+let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom } }
+
+// ══════════════════════════════════════════════════════════════════
+// 3. UNDO / REDO HISTORY
+// ══════════════════════════════════════════════════════════════════
 function saveState() {
-  // Deep clone the current state
-  const currentState = JSON.stringify({ events, groups, groupIdCounter, zoom, panX, panY });
+  // Deep clone the current state. Deliberately excludes zoom/panX/panY — camera
+  // position is "where you're looking", not "what changed", and shouldn't be
+  // captured or restored as part of content undo/redo (see persistViewport()).
+  const currentState = JSON.stringify({ events, groups, groupIdCounter });
   
   // Prevent duplicate consecutive states
   if (historyIndex >= 0 && historyStack[historyIndex] === currentState) return;
@@ -245,8 +384,62 @@ function saveState() {
     historyIndex++;
   }
 
-  // Persist to localStorage
-  localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+  persistHistory();
+}
+
+// How much of the undo stack we're willing to write to localStorage, in
+// (rough) bytes. This is deliberately NOT "persist everything" — at ~300
+// events a single snapshot is already ~85KB, so all MAX_HISTORY (128) of
+// them can exceed the ~5-10MB quota most browsers enforce, which makes
+// setItem() throw on every subsequent save. It's also deliberately NOT
+// "persist only the current state" — that avoids the quota problem but
+// throws away the ability to undo anything after a page reload, which is a
+// real feature people rely on, not just a nice-to-have.
+//
+// So instead: persist as many of the MOST RECENT states as fit in this
+// budget, walking backward from the latest one. Small graphs end up
+// persisting most or all of their (smaller) history; large graphs
+// automatically persist fewer, older states get dropped first — either way
+// the write always stays comfortably under quota.
+const PERSIST_BUDGET_BYTES = 2 * 1024 * 1024; // ~2MB
+
+function getPersistableHistoryWindow() {
+  if (historyStack.length === 0) return { stack: [], index: historyIndex };
+
+  // Always include at least the current/latest state, regardless of its own
+  // size, then greedily extend backward through older states as long as
+  // doing so keeps the running total within budget.
+  let startIdx = historyStack.length - 1;
+  let total = historyStack[startIdx].length;
+  for (let i = startIdx - 1; i >= 0; i--) {
+    const next = total + historyStack[i].length;
+    if (next > PERSIST_BUDGET_BYTES) break;
+    total = next;
+    startIdx = i;
+  }
+
+  return {
+    stack: historyStack.slice(startIdx),
+    index: historyIndex - startIdx,
+  };
+}
+
+// Wraps localStorage.setItem with a try/catch — quota errors should degrade
+// gracefully rather than throw up through whatever handler called this.
+function persistHistory() {
+  try {
+    const window = getPersistableHistoryWindow();
+    localStorage.setItem('vidas_secas_history', JSON.stringify(window));
+  } catch (e) {
+    // Even the trimmed window didn't fit (a single state must be enormous) —
+    // fall back to just the current state so a reload at least restores your
+    // latest work, even if cross-reload undo depth is lost this one time.
+    try {
+      localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: [historyStack[historyIndex]], index: 0 }));
+    } catch (e2) {
+      console.warn('Could not persist any state to localStorage (quota exceeded?):', e2);
+    }
+  }
 }
 
 function undo() {
@@ -258,8 +451,6 @@ function undo() {
       events = parsed.events || [];
       groups = parsed.groups || [];
       groupIdCounter = parsed.groupIdCounter || 0;
-      zoom = parsed.zoom ?? zoom;
-      if (parsed.panX !== undefined) { panX = parsed.panX; panY = parsed.panY; }
 
       // Clear selections to prevent referencing deleted indices
       selectedIdx = null;
@@ -267,8 +458,33 @@ function undo() {
       selectedLink = null;
       selectedRouter = null;
 
-      // Update LocalStorage index
-      localStorage.setItem('vidas_secas_history', JSON.stringify({ stack: historyStack, index: historyIndex }));
+      persistHistory();
+
+      // Re-render everything
+      renderCanvas();
+      renderForm();
+      generateCode();
+    }
+  }
+}
+
+function redo() {
+  if (historyIndex < historyStack.length - 1) {
+    historyIndex++;
+    const stateStr = historyStack[historyIndex];
+    if (stateStr) {
+      const parsed = JSON.parse(stateStr);
+      events = parsed.events || [];
+      groups = parsed.groups || [];
+      groupIdCounter = parsed.groupIdCounter || 0;
+
+      // Clear selections to prevent referencing deleted indices
+      selectedIdx = null;
+      selectedIndices.clear();
+      selectedLink = null;
+      selectedRouter = null;
+
+      persistHistory();
 
       // Re-render everything
       renderCanvas();
@@ -289,27 +505,55 @@ function resetHistory() {
     }
 }
 
-// ── HELP MODAL ──
-function openHelp() {
-  document.getElementById('help-overlay').classList.add('open');
-}
-function closeHelp(e) {
-  if (!e || e.target === document.getElementById('help-overlay') || e.currentTarget.classList.contains('help-close')) {
-    document.getElementById('help-overlay').classList.remove('open');
-  }
-}
-function confirmResetBoard() {
-  closeHelp();
-  setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
-}
-
-// ── UTILITY ──
+// ══════════════════════════════════════════════════════════════════
+// 4. GENERAL UTILITIES
+// ══════════════════════════════════════════════════════════════════
 function snapToGrid(v) {
   return gridSnapEnabled ? Math.round(v / GRID_SIZE) * GRID_SIZE : v;
 }
 
 function getTypeConfig(type) {
   return EVENT_TYPES[type] || { label: type, short: '???', bg: 'var(--fill)', fg: 'var(--text)', border: 'var(--border-md)' };
+}
+
+// Turns a list of CONDITION_FLAGS keys into the C expression generateCode()
+// emits for requiredFlags/forbiddenFlags — COND_NONE when empty, the bare
+// name for one flag, or a parenthesized bitwise-OR for several.
+function flagsToC(flagKeys) {
+  if (!flagKeys || flagKeys.length === 0) return 'COND_NONE';
+  if (flagKeys.length === 1) return flagKeys[0];
+  return `(${flagKeys.join(' | ')})`;
+}
+
+// Computes, from the CURRENT `events` graph, which events are "heads" (no
+// incoming option links — safe for trail.c's refreshEventPool() to roll
+// randomly) vs "leaves" (reached only by walking another event's option),
+// and the old-index → new-index remap that places heads at [0, headCount)
+// and leaves at [headCount, n). This is the SAME numbering generateCode()
+// uses for the actual events[] array — every place the editor displays an
+// event's index (node badges, option target labels, the Preview modal, etc.)
+// routes through this same remap, so what you see in the editor always
+// matches what that event's index will be in the generated code.
+function computeEventOrder() {
+  const n = events.length;
+  const incomingCounts = new Array(n).fill(0);
+  events.forEach(ev => {
+    (ev.options || []).forEach(opt => {
+      if (opt.nextId >= 0 && opt.nextId < n) incomingCounts[opt.nextId]++;
+    });
+  });
+
+  const headIndices = [];
+  const leafIndices = [];
+  events.forEach((ev, i) => {
+    (incomingCounts[i] === 0 ? headIndices : leafIndices).push(i);
+  });
+
+  const remap = new Array(n);
+  headIndices.forEach((oldIdx, pos) => { remap[oldIdx] = pos; });
+  leafIndices.forEach((oldIdx, pos) => { remap[oldIdx] = headIndices.length + pos; });
+
+  return { incomingCounts, headIndices, leafIndices, remap };
 }
 
 function makeEditable(element, initialValue, isTextArea, onSave) {
@@ -334,9 +578,235 @@ function makeEditable(element, initialValue, isTextArea, onSave) {
 //   saveState();
 }
 
-// ── GROUP LOGIC ──
+// C-string escaping for generated code, and HTML escaping for injected markup.
+function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-// Flood-fill: given a seed set of node indices, expand to include all reachable nodes via connections
+// ══════════════════════════════════════════════════════════════════
+// 5. HELP MODAL
+// ══════════════════════════════════════════════════════════════════
+function openHelp() {
+  document.getElementById('help-overlay').classList.add('open');
+}
+
+function closeHelp(e) {
+  if (!e || e.target === document.getElementById('help-overlay') || e.currentTarget.classList.contains('help-close')) {
+    document.getElementById('help-overlay').classList.remove('open');
+  }
+}
+
+function confirmResetBoard() {
+  closeHelp();
+  setTimeout(() => resetHistory(), 150); // slight delay so modal closes first
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 5b. SPOTLIGHT SEARCH — quick-jump to any node
+// ══════════════════════════════════════════════════════════════════
+// Searches across define name, message text, type label, and flag names/keys.
+// Results are scored so exact/prefix matches on the short, high-signal
+// fields (define, type, flags) outrank a mid-string hit buried in a long
+// message — see scoreMatch() below.
+let spotlightResults = [];
+let spotlightActiveIdx = -1;
+
+function openSpotlight() {
+  document.getElementById('spotlight-overlay').classList.add('open');
+  const input = document.getElementById('spotlight-input');
+  input.value = '';
+  renderSpotlightResults('');
+  // Focus after the transition starts so the modal is visually present
+  // before the keyboard/IME grabs focus.
+  setTimeout(() => input.focus(), 10);
+}
+
+function closeSpotlight(e) {
+  if (!e || e.target === document.getElementById('spotlight-overlay')) {
+    document.getElementById('spotlight-overlay').classList.remove('open');
+  }
+}
+
+function onSpotlightInput() {
+  renderSpotlightResults(document.getElementById('spotlight-input').value);
+}
+
+function onSpotlightKeydown(e) {
+  if (e.key === 'Escape') { closeSpotlight(); return; }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (spotlightResults.length === 0) return;
+    spotlightActiveIdx = Math.min(spotlightActiveIdx + 1, spotlightResults.length - 1);
+    highlightSpotlightResult();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (spotlightResults.length === 0) return;
+    spotlightActiveIdx = Math.max(spotlightActiveIdx - 1, 0);
+    highlightSpotlightResult();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (spotlightActiveIdx >= 0 && spotlightResults[spotlightActiveIdx]) {
+      jumpToNode(spotlightResults[spotlightActiveIdx].idx);
+    }
+  }
+}
+
+// Lower is better: 0 = exact match on a field, then prefix, then substring.
+// wordBoundary gives a small bonus so "house" beats a mid-word hit like
+// "warehouse" when both are substrings.
+function scoreMatch(fieldValue, query) {
+  if (!fieldValue) return Infinity;
+  const v = fieldValue.toLowerCase();
+  const q = query.toLowerCase();
+  const pos = v.indexOf(q);
+  if (pos === -1) return Infinity;
+  if (v === q) return 0;
+  if (pos === 0) return 1;
+  const boundary = /[\s_\-]/.test(v[pos - 1]);
+  return boundary ? 2 : 3;
+}
+
+function computeSpotlightMatches(query) {
+  const q = query.trim();
+  if (!q) {
+    // Empty query — list every node in canvas order so Spotlight also works
+    // as a lightweight "jump to node N" browser, not just a search box.
+    return events.map((ev, idx) => ({ idx, score: 0, field: null }));
+  }
+  const { remap } = computeEventOrder();
+  const results = [];
+  events.forEach((ev, idx) => {
+    let best = Infinity, bestField = null;
+    const candidates = [
+      ['define', ev.define],
+      ['message', ev.message],
+      ['type', (EVENT_TYPES[ev.type] || {}).label],
+      ['index', `[${remap[idx]}]`],
+    ];
+    (ev.requiredFlags || []).forEach(k => candidates.push(['flag', (CONDITION_FLAGS.find(f => f.key === k) || {}).label || k]));
+    (ev.forbiddenFlags || []).forEach(k => candidates.push(['flag', (CONDITION_FLAGS.find(f => f.key === k) || {}).label || k]));
+    candidates.forEach(([field, val]) => {
+      const s = scoreMatch(val, q);
+      if (s < best) { best = s; bestField = field; }
+    });
+    if (best !== Infinity) results.push({ idx, score: best, field: bestField });
+  });
+  // Stable-ish tiebreak: better score first, then canvas/creation order.
+  results.sort((a, b) => a.score - b.score || a.idx - b.idx);
+  return results;
+}
+
+function highlightMatch(text, query) {
+  if (!query.trim() || !text) return escHtml(text || '');
+  const idx = text.toLowerCase().indexOf(query.trim().toLowerCase());
+  if (idx === -1) return escHtml(text);
+  return escHtml(text.slice(0, idx)) + '<mark>' + escHtml(text.slice(idx, idx + query.trim().length)) + '</mark>' + escHtml(text.slice(idx + query.trim().length));
+}
+
+function renderSpotlightResults(query) {
+  spotlightResults = computeSpotlightMatches(query).slice(0, 40);
+  spotlightActiveIdx = spotlightResults.length > 0 ? 0 : -1;
+  const container = document.getElementById('spotlight-results');
+  container.innerHTML = '';
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="spotlight-empty">No nodes on the board yet.</div>';
+    return;
+  }
+  if (spotlightResults.length === 0) {
+    container.innerHTML = `<div class="spotlight-empty">No nodes match "${escHtml(query)}".</div>`;
+    return;
+  }
+
+  const { remap } = computeEventOrder();
+  spotlightResults.forEach((res, row) => {
+    const ev = events[res.idx];
+    const typeDef = EVENT_TYPES[ev.type] || { label: ev.type, bg: 'var(--fill)', fg: 'var(--muted)' };
+    const item = document.createElement('div');
+    item.className = 'spotlight-result' + (row === spotlightActiveIdx ? ' highlighted' : '');
+    item.onmouseenter = () => { spotlightActiveIdx = row; highlightSpotlightResult(); };
+    item.onclick = () => jumpToNode(res.idx);
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'spotlight-result-type';
+    typeBadge.style.background = typeDef.bg;
+    typeBadge.style.color = typeDef.fg;
+    typeBadge.textContent = typeDef.label;
+
+    const body = document.createElement('div');
+    body.className = 'spotlight-result-body';
+    const title = document.createElement('div');
+    title.className = 'spotlight-result-title' + (ev.define ? '' : ' untitled');
+    title.innerHTML = ev.define ? highlightMatch(ev.define, query) : '(unnamed node)';
+    const sub = document.createElement('div');
+    sub.className = 'spotlight-result-sub';
+    sub.innerHTML = highlightMatch(ev.message || '(no message)', query);
+    body.appendChild(title);
+    body.appendChild(sub);
+
+    const idxLabel = document.createElement('span');
+    idxLabel.className = 'spotlight-result-idx';
+    idxLabel.textContent = `[${remap[res.idx]}]`;
+
+    item.appendChild(typeBadge);
+    item.appendChild(body);
+    item.appendChild(idxLabel);
+    container.appendChild(item);
+  });
+}
+
+function highlightSpotlightResult() {
+  document.querySelectorAll('.spotlight-result').forEach((el, i) => {
+    el.classList.toggle('highlighted', i === spotlightActiveIdx);
+    if (i === spotlightActiveIdx) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+// Selects the node, expands its group if minimized so it's actually visible,
+// pans/zooms it into view, and gives it a brief pulse so it's easy to spot
+// even when the properties panel already shows it as selected.
+function jumpToNode(idx) {
+  closeSpotlight();
+  if (!events[idx]) return;
+
+  let groupsChanged = false;
+  groups.forEach(g => {
+    if (g.isMinimized && g.nodeIndices.includes(idx)) { g.isMinimized = false; groupsChanged = true; }
+  });
+
+  selectedIndices.clear();
+  selectedLink = null;
+  selectedRouter = null;
+  selectedGroupId = null;
+  if (groupsChanged) renderCanvas(); // rebuilds nodes-layer so un-minimized nodes lose their hidden class (also re-renders groups + connections)
+  selectEvent(idx);
+
+  const container = document.getElementById('canvas-container');
+  const vw = container.clientWidth, vh = container.clientHeight;
+  const NODE_W = 260, NODE_H = 160;
+  const ev = events[idx];
+  // Keep the current zoom if it's already reasonable to look at; only bump
+  // it up when the user was zoomed out so far the node would appear tiny.
+  let targetZoom = zoom < 0.5 ? 0.85 : zoom;
+  targetZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, targetZoom));
+  panX = vw / 2 - (ev.x + NODE_W / 2) * targetZoom;
+  panY = vh / 2 - (ev.y + NODE_H / 2) * targetZoom;
+  zoom = targetZoom;
+  updateCanvasTransform();
+  persistViewport();
+
+  setTimeout(() => {
+    const nodeEl = document.querySelector(`.node[data-idx="${idx}"]`);
+    if (nodeEl) {
+      nodeEl.classList.remove('spotlight-flash');
+      void nodeEl.offsetWidth; // restart animation if triggered twice in a row
+      nodeEl.classList.add('spotlight-flash');
+    }
+  }, 20);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 6. GROUPS (visual frames around related nodes)
+// ══════════════════════════════════════════════════════════════════
 function expandGroupToLinked(seedIndices) {
   const result = new Set(seedIndices);
   let changed = true;
@@ -387,7 +857,6 @@ function ungroupAll() {
   }
 }
 
-// Get bounding box of a group (in canvas coords)
 function getGroupBounds(g) {
   const PAD = 28;
   const HEADER = 32;
@@ -400,7 +869,7 @@ function getGroupBounds(g) {
     const h = 44 + 60 + (ev.options?.length > 0 ? optH : 36);
     if (ev.x < minX) minX = ev.x;
     if (ev.y < minY) minY = ev.y;
-    if (ev.x + 250 > maxX) maxX = ev.x + 250;
+    if (ev.x + 260 > maxX) maxX = ev.x + 260;
     if (ev.y + h > maxY) maxY = ev.y + h;
 
     // Include routers in bounds
@@ -435,7 +904,7 @@ function renderGroups() {
     // Override height if minimized
     if (g.isMinimized) {
       bounds.h = 32;  // Keep just the header height
-      bounds.w = 250; // Set to exactly ONE node's width
+      bounds.w = 260; // Set to exactly ONE node's width
     }
 
     const col = GROUP_COLORS[g.colorIdx % GROUP_COLORS.length];
@@ -538,10 +1007,17 @@ function renderGroups() {
   });
 }
 
-// ── RENDER CANVAS ──
+// ══════════════════════════════════════════════════════════════════
+// 7. CANVAS RENDERING (nodes + connections)
+// ══════════════════════════════════════════════════════════════════
 function renderCanvas() {
   const container = document.getElementById('nodes-layer');
   container.innerHTML = '';
+
+  // Same head/leaf index numbering generateCode() uses, so the badge shown
+  // on each node always matches what that event's index will be in the
+  // generated events[] array.
+  const { remap } = computeEventOrder();
 
   // 1. Calculate which nodes should be hidden
   const hiddenNodes = new Set();
@@ -563,7 +1039,6 @@ function renderCanvas() {
     if (isMulti && !isActive) classes += ' multi-selected';
     if (hiddenNodes.has(i)) classes += ' minimized-hidden';
 
-
     div.className = classes;
     div.style.left = `${ev.x}px`;
     div.style.top = `${ev.y}px`;
@@ -577,7 +1052,7 @@ function renderCanvas() {
 
     const nIdx = document.createElement('span');
     nIdx.className = 'node-idx';
-    nIdx.textContent = `[${i}]`;
+    nIdx.textContent = `[${remap[i]}]`;
 
     const nTitle = document.createElement('span');
     nTitle.className = 'node-title';
@@ -654,7 +1129,7 @@ function renderCanvas() {
         if (opt.nextId === -1) {
           nextLbl.textContent = 'TERM'; nextLbl.style.background = 'rgba(255,255,255,0.05)'; nextLbl.style.color = 'var(--muted)';
         } else {
-          nextLbl.textContent = `→ [${opt.nextId}]`; nextLbl.style.background = 'var(--accent-dim)'; nextLbl.style.color = '#7fc0ff';
+          nextLbl.textContent = `→ [${remap[opt.nextId]}]`; nextLbl.style.background = 'var(--accent-dim)'; nextLbl.style.color = '#7fc0ff';
         }
 
         const outHandle = document.createElement('div');
@@ -692,7 +1167,6 @@ function renderCanvas() {
   drawConnections();
 }
 
-// ── PATH BUILDER ──
 function buildPathWithRouters(startX, startY, endX, endY, routers) {
   if (!routers || routers.length === 0) {
     const cp1X = startX + 70, cp1Y = startY;
@@ -703,9 +1177,216 @@ function buildPathWithRouters(startX, startY, endX, endY, routers) {
   return `M ${pts.map(p => `${p.x} ${p.y}`).join(' L ')}`;
 }
 
-// ── KNIFE TOOL HELPERS ──
-// Returns the connection's geometry as a canvas-space polyline (curve sampled into segments
-// when it has no routers), or null if the link doesn't currently exist / isn't visible.
+function drawConnections() {
+  const svg = document.getElementById('svg-layer');
+  svg.innerHTML = '';
+  const nodesLayer = document.getElementById('nodes-layer');
+  nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
+
+  // Helper: convert a screen-space point (from getBoundingClientRect) to canvas space
+  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+  function toCanvas(screenX, screenY) {
+    return {
+      x: (screenX - containerRect.left - panX) / zoom,
+      y: (screenY - containerRect.top  - panY) / zoom
+    };
+  }
+
+  // 1. Get hidden nodes
+  const hiddenNodes = new Set();
+  groups.forEach(g => {
+    if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
+  });
+
+  // 2. READ PASS — look up every node's handles/anchor once (instead of
+  // re-querying the DOM per link) and measure every link's geometry, all
+  // before touching the DOM. Reading getBoundingClientRect and then writing
+  // to the DOM (appendChild) in the same loop iteration forces a synchronous
+  // layout recalculation on EVERY iteration ("layout thrashing") — this can
+  // easily be the difference between a smooth drag and a visibly stuttering
+  // one once there are 100+ connections on screen. Keeping all reads
+  // together means the browser computes layout once for this whole pass,
+  // not once per connection, and all writes happen in one batch afterward.
+  const nodeInfo = new Map(); // idx -> { handles, anchor }
+  nodesLayer.querySelectorAll('.node').forEach(nodeEl => {
+    const idx = parseInt(nodeEl.getAttribute('data-idx'), 10);
+    nodeInfo.set(idx, {
+      handles: nodeEl.querySelectorAll('.node-output-handle'),
+      anchor: nodeEl.querySelector('.node-input-anchor'),
+    });
+  });
+
+  const links = [];
+  events.forEach((ev, i) => {
+    if (!ev.options) return;
+    ev.options.forEach((opt, optIdx) => {
+      if (opt.nextId === -1 || !events[opt.nextId]) return;
+      if (hiddenNodes.has(i) || hiddenNodes.has(opt.nextId)) return;
+
+      const fromInfo = nodeInfo.get(i);
+      const toInfo = nodeInfo.get(opt.nextId);
+      const handle = fromInfo?.handles?.[optIdx];
+      const anchor = toInfo?.anchor;
+      if (!handle || !anchor) return;
+
+      const hRect = handle.getBoundingClientRect();
+      const aRect = anchor.getBoundingClientRect();
+      const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+      const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
+
+      if (!opt.routers) opt.routers = [];
+      links.push({ i, optIdx, opt, startX: start.x, startY: start.y, endX: end.x, endY: end.y });
+    });
+  });
+
+  // 3. WRITE PASS — build everything into fragments and append once each,
+  // instead of appending to the live SVG/nodes-layer inside the loop.
+  const linkFragment = document.createDocumentFragment();
+  const routerFragment = document.createDocumentFragment();
+
+  links.forEach(({ i, optIdx, opt, startX, startY, endX, endY }) => {
+    const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
+
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', 'svg-link-group');
+    group.setAttribute('data-node-idx', i);
+    group.setAttribute('data-opt-idx', optIdx);
+
+    const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hitPath.setAttribute('d', pathString);
+    hitPath.setAttribute('class', 'svg-link-hitbox');
+
+    const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    visPath.setAttribute('d', pathString);
+    visPath.setAttribute('class', 'svg-link-visible');
+
+    const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
+    const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
+
+    visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
+    visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
+
+    group.appendChild(hitPath);
+    group.appendChild(visPath);
+
+    group.addEventListener('click', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const click = toCanvas(e.clientX, e.clientY);
+      const clickX = click.x, clickY = click.y;
+      if (!opt.routers) opt.routers = [];
+      const newPt = { x: clickX, y: clickY };
+      const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
+      let bestSegIdx = 0, bestDist = Infinity;
+      for (let k = 0; k < allPts.length - 1; k++) {
+        const ax = allPts[k].x, ay = allPts[k].y;
+        const bx = allPts[k+1].x, by = allPts[k+1].y;
+        const dx = bx - ax, dy = by - ay;
+        const lenSq = dx*dx + dy*dy;
+        const t = lenSq > 0 ? Math.max(0, Math.min(1, ((clickX-ax)*dx + (clickY-ay)*dy) / lenSq)) : 0;
+        const closestX = ax + t*dx, closestY = ay + t*dy;
+        const dist = Math.hypot(clickX - closestX, clickY - closestY);
+        if (dist < bestDist) { bestDist = dist; bestSegIdx = k; }
+      }
+      opt.routers.splice(bestSegIdx, 0, newPt);
+      drawConnections();
+    });
+
+    group.addEventListener('mousedown', (e) => {
+      if (e.ctrlKey || e.metaKey) return;
+      e.stopPropagation();
+      selectedLink = { nodeIdx: i, optionIdx: optIdx };
+      selectedRouter = null;
+      selectEvent(null);
+    });
+
+    linkFragment.appendChild(group);
+
+    opt.routers.forEach((router, routerIdx) => {
+      const isSelRouter = selectedRouter &&
+        selectedRouter.nodeIdx === i &&
+        selectedRouter.optionIdx === optIdx &&
+        selectedRouter.routerIdx === routerIdx;
+
+      const rdiv = document.createElement('div');
+      rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
+      rdiv.style.left = `${router.x}px`;
+      rdiv.style.top = `${router.y}px`;
+      rdiv.setAttribute('data-node-idx', i);
+      rdiv.setAttribute('data-opt-idx', optIdx);
+      rdiv.setAttribute('data-router-idx', routerIdx);
+
+      rdiv.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectedRouter = { nodeIdx: i, optionIdx: optIdx, routerIdx };
+        selectedLink = null;
+        selectEvent(null);
+        draggingRouter = {
+          nodeIdx: i, optionIdx: optIdx, routerIdx,
+          offsetX: e.clientX / zoom - router.x,
+          offsetY: e.clientY / zoom - router.y
+        };
+        drawConnections();
+      });
+
+      routerFragment.appendChild(rdiv);
+    });
+  });
+
+  svg.appendChild(linkFragment);
+  nodesLayer.appendChild(routerFragment);
+
+  if (activeLinkDrag) {
+    const cp1X = activeLinkDrag.startX + 70;
+    const cp1Y = activeLinkDrag.startY;
+    const cp2X = activeLinkDrag.currentX - 70;
+    const cp2Y = activeLinkDrag.currentY;
+    const dragPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    dragPath.setAttribute('d', `M ${activeLinkDrag.startX} ${activeLinkDrag.startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${activeLinkDrag.currentX} ${activeLinkDrag.currentY}`);
+    dragPath.setAttribute('stroke', '#30d158');
+    dragPath.setAttribute('stroke-width', '2');
+    dragPath.setAttribute('stroke-dasharray', '4 3');
+    dragPath.setAttribute('fill', 'none');
+    svg.appendChild(dragPath);
+  }
+}
+
+function updateCanvasTransform() {
+  const canvas = document.getElementById('canvas');
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  canvas.style.outlineWidth = `${1 / zoom}px`;
+  // Ensure canvas and SVG layer always cover the full virtual area
+  canvas.style.width  = `${CANVAS_SIZE}px`;
+  canvas.style.height = `${CANVAS_SIZE}px`;
+  const svg = document.getElementById('svg-layer');
+  svg.style.width  = `${CANVAS_SIZE}px`;
+  svg.style.height = `${CANVAS_SIZE}px`;
+  svg.setAttribute('viewBox', `0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`);
+  // Update zoom level badge
+  const badge = document.getElementById('zoom-badge');
+  if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
+  persistViewport();
+}
+
+// Persists camera position independently of the undo/redo history/localStorage
+// key — small and cheap to write on every transform update (pan/zoom), so the
+// view is restored on reload without ever being coupled to content edits.
+function persistViewport() {
+  try {
+    localStorage.setItem(VIEWPORT_KEY, JSON.stringify({ panX, panY, zoom }));
+  } catch (e) {
+    // Non-critical — losing the last camera position on reload isn't a big deal.
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 8. KNIFE TOOL (Ctrl + drag to cut connections)
+// Draws a dashed line while dragging; any connection whose curve crosses that
+// line is severed on release. Connections are sampled into short polylines so
+// straight-line segment-intersection tests work even on curved, router-free links.
+// ══════════════════════════════════════════════════════════════════
 function computeLinkGeometry(nodeIdx, optionIdx) {
   const ev = events[nodeIdx];
   const opt = ev && ev.options && ev.options[optionIdx];
@@ -760,7 +1441,6 @@ function polylineIntersectsSegment(points, a, b) {
   return false;
 }
 
-// Live feedback while dragging the knife: highlight whichever links currently cross the blade
 function previewKnifeCuts(canvasA, canvasB) {
   document.querySelectorAll('.svg-link-group.cut-target').forEach(g => g.classList.remove('cut-target'));
   events.forEach((ev, i) => {
@@ -777,7 +1457,6 @@ function previewKnifeCuts(canvasA, canvasB) {
   });
 }
 
-// Sever every connection the knife's blade crossed. Coordinates are container-relative screen points.
 function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
   const a = { x: (screenX1 - panX) / zoom, y: (screenY1 - panY) / zoom };
   const b = { x: (screenX2 - panX) / zoom, y: (screenY2 - panY) / zoom };
@@ -805,172 +1484,13 @@ function cutConnectionsAlongLine(screenX1, screenY1, screenX2, screenY2) {
   }
 }
 
-function drawConnections() {
-  const svg = document.getElementById('svg-layer');
-  svg.innerHTML = '';
-  const nodesLayer = document.getElementById('nodes-layer');
-  nodesLayer.querySelectorAll('.router-node').forEach(r => r.remove());
+// ══════════════════════════════════════════════════════════════════
+// 9. CANVAS INPUT HANDLING
+// Pan, zoom, marquee-select, node/router/link dragging, the knife tool, and
+// quick-connect-by-dragging-to-empty-canvas all funnel through the handlers below.
+// ══════════════════════════════════════════════════════════════════
 
-  // Helper: convert a screen-space point (from getBoundingClientRect) to canvas space
-  const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
-  function toCanvas(screenX, screenY) {
-    return {
-      x: (screenX - containerRect.left - panX) / zoom,
-      y: (screenY - containerRect.top  - panY) / zoom
-    };
-  }
-
-  // 1. Get hidden nodes
-  const hiddenNodes = new Set();
-  groups.forEach(g => {
-    if (g.isMinimized) g.nodeIndices.forEach(idx => hiddenNodes.add(idx));
-  });
-
-  events.forEach((ev, i) => {
-    if (!ev.options) return;
-    ev.options.forEach((opt, optIdx) => {
-      if (opt.nextId === -1 || !events[opt.nextId]) return;
-
-      if (hiddenNodes.has(i) || hiddenNodes.has(opt.nextId)) return;
-
-      const nodeEl = document.querySelector(`.node[data-idx="${i}"]`);
-      const handles = nodeEl?.querySelectorAll('.node-output-handle');
-      const handle = handles?.[optIdx];
-      const targetEl = document.querySelector(`.node[data-idx="${opt.nextId}"]`);
-      const anchor = targetEl?.querySelector('.node-input-anchor');
-      if (!handle || !anchor) return;
-
-      const hRect = handle.getBoundingClientRect();
-      const aRect = anchor.getBoundingClientRect();
-      const start = toCanvas(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
-      const end   = toCanvas(aRect.left + aRect.width  / 2, aRect.top + aRect.height / 2);
-      const startX = start.x, startY = start.y, endX = end.x, endY = end.y;
-
-      if (!opt.routers) opt.routers = [];
-      const pathString = buildPathWithRouters(startX, startY, endX, endY, opt.routers);
-
-      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      group.setAttribute('class', 'svg-link-group');
-      group.setAttribute('data-node-idx', i);
-      group.setAttribute('data-opt-idx', optIdx);
-
-      const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      hitPath.setAttribute('d', pathString);
-      hitPath.setAttribute('class', 'svg-link-hitbox');
-
-      const visPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      visPath.setAttribute('d', pathString);
-      visPath.setAttribute('class', 'svg-link-visible');
-
-      const isSelectedNode = (i === selectedIdx || opt.nextId === selectedIdx);
-      const isSelectedLink = (selectedLink && selectedLink.nodeIdx === i && selectedLink.optionIdx === optIdx);
-
-      visPath.setAttribute('stroke', isSelectedLink ? '#ff453a' : (isSelectedNode ? '#007aff' : 'rgba(255,255,255,0.15)'));
-      visPath.setAttribute('stroke-width', isSelectedLink ? '4' : (isSelectedNode ? '2.5' : '1.5'));
-
-      group.appendChild(hitPath);
-      group.appendChild(visPath);
-
-      group.addEventListener('click', (e) => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const click = toCanvas(e.clientX, e.clientY);
-        const clickX = click.x, clickY = click.y;
-        if (!opt.routers) opt.routers = [];
-        const newPt = { x: clickX, y: clickY };
-        const allPts = [{ x: startX, y: startY }, ...opt.routers, { x: endX, y: endY }];
-        let bestSegIdx = 0, bestDist = Infinity;
-        for (let k = 0; k < allPts.length - 1; k++) {
-          const ax = allPts[k].x, ay = allPts[k].y;
-          const bx = allPts[k+1].x, by = allPts[k+1].y;
-          const dx = bx - ax, dy = by - ay;
-          const lenSq = dx*dx + dy*dy;
-          const t = lenSq > 0 ? Math.max(0, Math.min(1, ((clickX-ax)*dx + (clickY-ay)*dy) / lenSq)) : 0;
-          const closestX = ax + t*dx, closestY = ay + t*dy;
-          const dist = Math.hypot(clickX - closestX, clickY - closestY);
-          if (dist < bestDist) { bestDist = dist; bestSegIdx = k; }
-        }
-        opt.routers.splice(bestSegIdx, 0, newPt);
-        drawConnections();
-      });
-
-      group.addEventListener('mousedown', (e) => {
-        if (e.ctrlKey || e.metaKey) return;
-        e.stopPropagation();
-        selectedLink = { nodeIdx: i, optionIdx: optIdx };
-        selectedRouter = null;
-        selectEvent(null);
-      });
-
-      svg.appendChild(group);
-
-      opt.routers.forEach((router, routerIdx) => {
-        const isSelRouter = selectedRouter &&
-          selectedRouter.nodeIdx === i &&
-          selectedRouter.optionIdx === optIdx &&
-          selectedRouter.routerIdx === routerIdx;
-
-        const rdiv = document.createElement('div');
-        rdiv.className = 'router-node' + (isSelRouter ? ' router-selected' : '');
-        rdiv.style.left = `${router.x}px`;
-        rdiv.style.top = `${router.y}px`;
-        rdiv.setAttribute('data-node-idx', i);
-        rdiv.setAttribute('data-opt-idx', optIdx);
-        rdiv.setAttribute('data-router-idx', routerIdx);
-
-        rdiv.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          selectedRouter = { nodeIdx: i, optionIdx: optIdx, routerIdx };
-          selectedLink = null;
-          selectEvent(null);
-          draggingRouter = {
-            nodeIdx: i, optionIdx: optIdx, routerIdx,
-            offsetX: e.clientX / zoom - router.x,
-            offsetY: e.clientY / zoom - router.y
-          };
-          drawConnections();
-        });
-
-        nodesLayer.appendChild(rdiv);
-      });
-    });
-  });
-
-  if (activeLinkDrag) {
-    const cp1X = activeLinkDrag.startX + 70;
-    const cp1Y = activeLinkDrag.startY;
-    const cp2X = activeLinkDrag.currentX - 70;
-    const cp2Y = activeLinkDrag.currentY;
-    const dragPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    dragPath.setAttribute('d', `M ${activeLinkDrag.startX} ${activeLinkDrag.startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${activeLinkDrag.currentX} ${activeLinkDrag.currentY}`);
-    dragPath.setAttribute('stroke', '#30d158');
-    dragPath.setAttribute('stroke-width', '2');
-    dragPath.setAttribute('stroke-dasharray', '4 3');
-    dragPath.setAttribute('fill', 'none');
-    svg.appendChild(dragPath);
-  }
-}
-
-function updateCanvasTransform() {
-  const canvas = document.getElementById('canvas');
-  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
-  // Ensure canvas and SVG layer always cover the full virtual area
-  canvas.style.width  = `${CANVAS_SIZE}px`;
-  canvas.style.height = `${CANVAS_SIZE}px`;
-  const svg = document.getElementById('svg-layer');
-  svg.style.width  = `${CANVAS_SIZE}px`;
-  svg.style.height = `${CANVAS_SIZE}px`;
-  svg.setAttribute('viewBox', `0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`);
-  // Update zoom level badge
-  const badge = document.getElementById('zoom-badge');
-  if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
-}
-
-// ── INPUT HANDLERS ──
-
-// ── ZOOM (mouse-wheel, pinch via wheel event with ctrlKey) ──
+// ── Zoom (mouse-wheel, pinch via wheel event with ctrlKey) ──
 document.getElementById('canvas-container').addEventListener('wheel', (e) => {
   e.preventDefault();
 
@@ -993,8 +1513,7 @@ document.getElementById('canvas-container').addEventListener('wheel', (e) => {
   updateCanvasTransform();
 }, { passive: false });
 
-// ── DOUBLE-CLICK QUICK-CONNECT ──
-// Double-click on empty canvas near a node → create new node and wire it from the closest node
+// ── Double-click quick-create ──
 document.getElementById('canvas-container').addEventListener('dblclick', (e) => {
   // Only fire on the canvas background (not on a node or button)
   const onBg = e.target.id === 'canvas-container' || e.target.id === 'svg-layer' || e.target.id === 'canvas';
@@ -1008,7 +1527,7 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
   const newX = snapToGrid(clickX - 125);
   const newY = snapToGrid(clickY - 60);
   const newIdx = events.length;
-  events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+  events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: newX, y: newY });
 
   renderCanvas();
   selectEvent(newIdx);
@@ -1016,6 +1535,7 @@ document.getElementById('canvas-container').addEventListener('dblclick', (e) => 
   saveState();
 });
 
+// ── Mouse-down dispatch: knife tool / marquee / pan ──
 function onCanvasMouseDown(e) {
   if (e.ctrlKey || e.metaKey) {
     // Start knife tool — draw a cutting line, sever any connections it crosses on release.
@@ -1118,13 +1638,46 @@ function onNodeMouseDown(e, idx) {
   dragOffsetY = e.clientY / zoom - events[idx].y;
 }
 
+// ── Keyboard shortcuts ──
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
 
+  // While the Help, Event Preview, or Spotlight modal is open, only Escape does
+  // anything — canvas/graph shortcuts (delete, duplicate, group, undo...) stay
+  // inert so a stray keypress can't edit the graph behind the modal.
+  const helpOpen = document.getElementById('help-overlay').classList.contains('open');
+  const previewOpen = document.getElementById('event-preview-overlay').classList.contains('open');
+  const spotlightOpen = document.getElementById('spotlight-overlay').classList.contains('open');
+  if (helpOpen || previewOpen || spotlightOpen) {
+    if (e.key === 'Escape') {
+      closeHelp();
+      closeEventPreview();
+      closeSpotlight();
+    }
+    return;
+  }
+
+  // Ctrl/Cmd+K — open Spotlight search
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openSpotlight();
+    return;
+  }
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
-    undo();
+    if (e.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+    return;
+  }
+
+  // Ctrl+Y — alternate redo shortcut (common on Windows)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
     return;
   }
 
@@ -1191,11 +1744,6 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (e.key === 'Escape') {
-    document.getElementById('help-overlay').classList.remove('open');
-    return;
-  }
-
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedRouter) {
       const { nodeIdx, optionIdx, routerIdx } = selectedRouter;
@@ -1248,6 +1796,7 @@ function onHandleMouseDown(e, nodeIdx, optionIdx) {
   };
 }
 
+// ── Global mouse-move / mouse-up (all drag gestures resolve here) ──
 window.onmousemove = (e) => {
   if (draggingOption) {
     onOptionDragMove(e);
@@ -1286,7 +1835,6 @@ window.onmousemove = (e) => {
     const mx1 = (x - panX) / zoom, my1 = (y - panY) / zoom;
     const mx2 = mx1 + w / zoom, my2 = my1 + h / zoom;
 
-
    // Check for hidden nodes
     const hiddenNodes = new Set();
     groups.forEach(g => {
@@ -1299,7 +1847,7 @@ window.onmousemove = (e) => {
 
       if (hiddenNodes.has(i)) return;
 
-      const nx = ev.x, ny = ev.y, nw = 250, nh = 100;
+      const nx = ev.x, ny = ev.y, nw = 260, nh = 100;
       if (nx + nw > mx1 && nx < mx2 && ny + nh > my1 && ny < my2) {
         selectedIndices.add(i);
       }
@@ -1350,6 +1898,7 @@ window.onmousemove = (e) => {
       opt.routers[routerIdx].y = snapToGrid(e.clientY / zoom - offsetY);
       const rdiv = document.querySelector(`.router-node[data-node-idx="${nodeIdx}"][data-opt-idx="${optionIdx}"][data-router-idx="${routerIdx}"]`);
       if (rdiv) { rdiv.style.left = `${opt.routers[routerIdx].x}px`; rdiv.style.top = `${opt.routers[routerIdx].y}px`; }
+      renderGroups();
       drawConnections();
     }
   } else if (draggingNodeIdx !== null) {
@@ -1430,7 +1979,6 @@ window.onmouseup = (e) => {
   // Track if a modification actually happened
   const stateChanged = draggingNodeIdx !== null || draggingRouter !== null || draggingMulti || draggingGroupId !== null || activeLinkDrag !== null;
 
-
   isPanning = false;
   draggingNodeIdx = null;
   draggingRouter = null;
@@ -1462,7 +2010,7 @@ window.onmouseup = (e) => {
       const newX = snapToGrid(activeLinkDrag.currentX);
       const newY = snapToGrid(activeLinkDrag.currentY - 25);
       const newIdx = events.length;
-      events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], x: newX, y: newY });
+      events.push({ define: '', message: '', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: newX, y: newY });
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].nextId = newIdx;
       events[activeLinkDrag.fromNodeIdx].options[activeLinkDrag.optionIdx].routers = [];
       activeLinkDrag = null;
@@ -1483,6 +2031,7 @@ window.onmouseup = (e) => {
   if (stateChanged) saveState();
 };
 
+// ── Viewport helpers ──
 function fitToScreen() {
   if (events.length === 0) return;
 
@@ -1535,11 +2084,14 @@ function resetZoom() {
   updateCanvasTransform();
 }
 
-// ── PROPERTIES PANEL ──
+// ══════════════════════════════════════════════════════════════════
+// 10. PROPERTIES PANEL (right sidebar — edit the selected event)
+// ══════════════════════════════════════════════════════════════════
 function renderForm() {
   if (selectedIdx === null) {
     document.getElementById('empty-state').style.display = 'flex';
     document.getElementById('event-form').style.display = 'none';
+    updateCanvasPreviewButton();
     return;
   }
   document.getElementById('empty-state').style.display = 'none';
@@ -1548,6 +2100,11 @@ function renderForm() {
   document.getElementById('f-define').value = ev.define || '';
   document.getElementById('f-message').value = ev.message || '';
   document.getElementById('char-count').textContent = (ev.message || '').length;
+  document.getElementById('f-min-distance').value = ev.minDistance ?? 0;
+  document.getElementById('f-max-distance').value = ev.maxDistance ?? 9999;
+  updateDistanceValidationUI();
+  renderFlagSelector('required-flags-container', ev.requiredFlags || []);
+  renderFlagSelector('forbidden-flags-container', ev.forbiddenFlags || []);
   renderTypeSelector(ev.type); renderOptions();
 }
 
@@ -1570,9 +2127,63 @@ function renderTypeSelector(activeType) {
   });
 }
 
+// Renders one Required/Forbidden flag checklist as toggle chips, driven
+// entirely by CONDITION_FLAGS — add a flag there and it shows up here with
+// no other changes needed.
+function renderFlagSelector(containerId, activeKeys) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  if (CONDITION_FLAGS.length === 0) {
+    container.innerHTML = '<div class="flags-empty">No condition flags defined yet — add entries to CONDITION_FLAGS.</div>';
+    return;
+  }
+  const ev = events[selectedIdx];
+  const isRequired = containerId === 'required-flags-container';
+  // A flag active in the OTHER list would make this condition unsatisfiable
+  // (must be set AND unset at once), so it's shown disabled here rather
+  // than left clickable — see toggleFlag() for what a click on it does.
+  const oppositeKeys = isRequired ? (ev.forbiddenFlags || []) : (ev.requiredFlags || []);
+  CONDITION_FLAGS.forEach(flag => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    const isActive = (activeKeys || []).includes(flag.key);
+    const isOpposite = oppositeKeys.includes(flag.key);
+    chip.className = 'flag-chip' + (isActive ? ' active' : '') + (isOpposite ? ' disabled-exclusive' : '');
+    chip.textContent = flag.label;
+    chip.title = isOpposite
+      ? `${flag.key} — bit ${flag.bit} (currently ${isRequired ? 'forbidden' : 'required'}; click to move it here instead)`
+      : `${flag.key} — bit ${flag.bit}`;
+    chip.onclick = () => toggleFlag(isRequired ? 'requiredFlags' : 'forbiddenFlags', flag.key);
+    container.appendChild(chip);
+  });
+}
+
+function toggleFlag(field, key) {
+  const ev = events[selectedIdx];
+  const arr = ev[field] || (ev[field] = []);
+  const oppositeField = field === 'requiredFlags' ? 'forbiddenFlags' : 'requiredFlags';
+  const oppositeArr = ev[oppositeField] || (ev[oppositeField] = []);
+  const oppositePos = oppositeArr.indexOf(key);
+  if (oppositePos !== -1) {
+    // Flag was set on the opposite side — moving it here means it stops
+    // being forbidden/required over there. Swap rather than block, so one
+    // click flips a flag straight from one list to the other.
+    oppositeArr.splice(oppositePos, 1);
+    arr.push(key);
+  } else {
+    const pos = arr.indexOf(key);
+    if (pos === -1) arr.push(key); else arr.splice(pos, 1);
+  }
+  renderFlagSelector('required-flags-container', ev.requiredFlags || []);
+  renderFlagSelector('forbidden-flags-container', ev.forbiddenFlags || []);
+  generateCode();
+  saveState();
+}
+
 function renderOptions() {
   const container = document.getElementById('options-container'); container.innerHTML = '';
   const ev = events[selectedIdx];
+  const { remap } = computeEventOrder();
   ev.options.forEach((opt, i) => {
     const card = document.createElement('div');
     card.className = 'option-card';
@@ -1580,8 +2191,8 @@ function renderOptions() {
     const optionsHtml = events.map((targetEv, targetIdx) => {
       if (targetIdx === selectedIdx) return '';
       const label = targetEv.define
-        ? `[${targetIdx}] ${targetEv.define}`
-        : `[${targetIdx}] ${targetEv.message.substring(0, 26)}...`;
+        ? `[${remap[targetIdx]}] ${targetEv.define}`
+        : `[${remap[targetIdx]}] ${targetEv.message.substring(0, 26)}...`;
       return `<option value="${targetIdx}" ${opt.nextId === targetIdx ? 'selected' : ''}>Link to: ${escHtml(label)}</option>`;
     }).join('');
     card.innerHTML = `
@@ -1594,7 +2205,7 @@ function renderOptions() {
           </svg>
         </span>
         <span class="option-num">${i + 1}</span>
-        <input type="text" value="${escHtml(opt.message)}" oninput="updateOptionData(${i}, 'message', this.value)">
+        <input type="text" value="${escHtml(opt.message)}" oninput="onOptionMessageInput(${i}, this.value)" onchange="updateOptionData(${i}, 'message', this.value)">
         <button class="rm-option" onclick="removeOption(${i})">✕</button>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -1608,11 +2219,178 @@ function renderOptions() {
     container.appendChild(card);
   });
   document.getElementById('add-option-btn').style.display = ev.options.length >= 4 ? 'none' : 'inline-block';
+  document.getElementById('preview-event-btn').style.display = ev.options.length > 0 ? 'inline-flex' : 'none';
+  updateCanvasPreviewButton();
 }
 
-// ── OPTION REORDERING (drag handle in the Properties Panel) ──
-let draggingOption = null; // { idx, startClientY, bounds: { minTop, maxBottom } }
+function updateOptionData(optIdx, field, value) {
+    events[selectedIdx].options[optIdx][field] = value;
+    renderCanvas(); generateCode();
+    saveState();
+}
 
+// Cheap live update while typing an option's message: just update the data
+// model and the small text preview on the canvas node directly, skipping the
+// full renderCanvas()/generateCode()/saveState() cycle updateOptionData()
+// does. That expensive chain (which tears down and rebuilds every node,
+// regenerates all the C code, and JSON-stringifies the whole graph) only
+// needs to run once you're actually done typing — see the input's onchange
+// handler, which still calls updateOptionData() on blur.
+function onOptionMessageInput(optIdx, value) {
+  events[selectedIdx].options[optIdx].message = value;
+  const nodeEl = document.querySelector(`.node[data-idx="${selectedIdx}"]`);
+  const optTxt = nodeEl?.querySelectorAll('.node-opt-text')[optIdx];
+  if (optTxt) optTxt.textContent = `${optIdx + 1}. ${value || 'Option'}`;
+}
+
+function addOption() {
+    events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
+
+function removeOption(optIdx) {
+    events[selectedIdx].options.splice(optIdx, 1);
+    renderOptions(); renderCanvas(); generateCode();
+    saveState();
+}
+
+function onFieldChange() {
+  const ev = events[selectedIdx];
+  ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
+  ev.message = document.getElementById('f-message').value;
+  document.getElementById('char-count').textContent = ev.message.length;
+
+  const minVal = parseFloat(document.getElementById('f-min-distance').value);
+  const maxVal = parseFloat(document.getElementById('f-max-distance').value);
+  ev.minDistance = isNaN(minVal) ? 0 : minVal;
+  ev.maxDistance = isNaN(maxVal) ? 9999 : maxVal;
+  updateDistanceValidationUI();
+
+  renderCanvas(); generateCode();
+  saveState();
+}
+
+// Warns in-place when minDistance > maxDistance — a valid-looking config that
+// would actually make refreshEventPool() never select this event.
+function updateDistanceValidationUI() {
+  const ev = events[selectedIdx];
+  const warningEl = document.getElementById('f-distance-warning');
+  if ((ev.minDistance ?? 0) > (ev.maxDistance ?? 9999)) {
+    warningEl.textContent = '⚠ Min distance is greater than max distance — this event can never trigger.';
+  } else {
+    warningEl.textContent = '';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 11. EVENT PREVIEW MODAL
+// Mocks the in-game STATE_EVENT screen from main.c: a black frame with the
+// event's message in a bordered box, and (if it has options) a row of buttons
+// below it — same idea as MeasureText/DrawRectangleLines/GuiButton there.
+// Clicking an option actually walks the graph like the real game's
+// triggerEvent() would, so this doubles as a quick way to playtest branches
+// without leaving the editor.
+// ══════════════════════════════════════════════════════════════════
+let previewHistory = []; // stack of event indices visited this preview session
+let previewRootIdx = null; // the event the preview was opened on (for Restart)
+
+function openEventPreview() {
+  if (selectedIdx === null || !events[selectedIdx]) return;
+  previewRootIdx = selectedIdx;
+  previewHistory = [];
+  renderEventPreviewScreen(selectedIdx);
+  document.getElementById('event-preview-overlay').classList.add('open');
+}
+
+function closeEventPreview(e) {
+  if (!e || e.target === document.getElementById('event-preview-overlay') || e.currentTarget.classList.contains('help-close')) {
+    document.getElementById('event-preview-overlay').classList.remove('open');
+  }
+}
+
+function previewRestart() {
+  if (previewRootIdx === null) return;
+  previewHistory = [];
+  renderEventPreviewScreen(previewRootIdx);
+}
+
+function previewGoBack() {
+  if (previewHistory.length === 0) return;
+  const prevIdx = previewHistory.pop();
+  renderEventPreviewScreen(prevIdx, { recordHistory: false });
+}
+
+// Renders the mock game screen for events[idx]. Pass recordHistory: false when
+// navigating backward so we don't re-push the node we just came from.
+function renderEventPreviewScreen(idx, { recordHistory = true } = {}) {
+  if (!events[idx]) { closeEventPreview(); return; }
+
+  const ev = events[idx];
+  const cfg = getTypeConfig(ev.type);
+  const { remap } = computeEventOrder();
+
+  const breadcrumb = document.getElementById('preview-breadcrumb');
+  const label = ev.define ? `[${remap[idx]}] ${ev.define}` : `[${remap[idx]}] (no define)`;
+  breadcrumb.innerHTML = `Previewing <span class="crumb-current">${escHtml(label)}</span> — ${escHtml(cfg.label)}`;
+
+  const msgBox = document.getElementById('preview-message-box');
+  msgBox.textContent = ev.message || '(Empty Text String)';
+  msgBox.style.borderColor = cfg.fg || '#fff';
+  msgBox.style.color = cfg.fg || '#fff';
+
+  const optsRow = document.getElementById('preview-options-row');
+  optsRow.innerHTML = '';
+  const hint = document.getElementById('preview-hint');
+
+  if (ev.options && ev.options.length > 0) {
+    hint.textContent = '';
+    ev.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'preview-option-btn' + (opt.nextId === -1 ? ' is-terminal' : '');
+      btn.textContent = opt.message || 'Option';
+      btn.title = opt.nextId === -1 ? 'Ends the conversation (Terminal Leaf Node)' : `Links to [${remap[opt.nextId]}]`;
+      btn.onclick = () => previewChooseOption(idx, opt.nextId);
+      optsRow.appendChild(btn);
+    });
+  } else {
+    // No options — matches the game's numOptions == 0 case, which just shows
+    // the message and lets the player press Enter to keep moving.
+    hint.textContent = 'Enter to continue';
+  }
+
+  document.getElementById('preview-back-btn').style.display = previewHistory.length > 0 ? 'inline-flex' : 'none';
+  document.getElementById('preview-restart-btn').style.display = idx !== previewRootIdx ? 'inline-flex' : 'none';
+}
+
+function previewChooseOption(fromIdx, nextId) {
+  if (nextId === -1) {
+    // Terminal choice — same as the real game: state returns to gameplay.
+    // We keep the modal open but show an explicit end-of-branch screen,
+    // since silently vanishing would be a confusing way to preview content.
+    previewHistory.push(fromIdx);
+    document.getElementById('preview-breadcrumb').innerHTML = `Previewing <span class="crumb-current">— end of branch —</span>`;
+    document.getElementById('preview-message-box').textContent = '— Conversation ends here —';
+    document.getElementById('preview-message-box').style.borderColor = 'rgba(255,255,255,0.4)';
+    document.getElementById('preview-message-box').style.color = 'rgba(255,255,255,0.6)';
+    document.getElementById('preview-options-row').innerHTML = '';
+    document.getElementById('preview-hint').textContent = '';
+    document.getElementById('preview-back-btn').style.display = 'inline-flex';
+    document.getElementById('preview-restart-btn').style.display = 'inline-flex';
+    return;
+  }
+  if (!events[nextId]) return;
+  previewHistory.push(fromIdx);
+  renderEventPreviewScreen(nextId, { recordHistory: false });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 12. OPTION REORDERING (drag handle in the Properties Panel)
+// An option's nextId/routers travel with it in the array, so reordering is just
+// moving array elements — the canvas connections follow automatically because
+// drawConnections() derives each link's start point from the option's live
+// position (its Nth output pin) at render time.
+// ══════════════════════════════════════════════════════════════════
 function applyDragVisual(card, dy) {
   card.classList.add('dragging');
   card.style.transform = `translateY(${dy}px)`;
@@ -1684,9 +2462,6 @@ function onOptionDragMove(e) {
   applyDragVisual(card, dy);
 }
 
-// Swaps two adjacent options in the data model, re-renders the list and canvas so
-// output pins / connection curves follow the new order, and FLIP-animates the
-// displaced neighbor sliding into its new slot.
 function swapOptions(i, j) {
   const container = document.getElementById('options-container');
   const neighborFirstRect = container.querySelectorAll('.option-card')[j].getBoundingClientRect();
@@ -1724,32 +2499,9 @@ function onOptionDragEnd() {
   saveState();
 }
 
-function updateOptionData(optIdx, field, value) {
-    events[selectedIdx].options[optIdx][field] = value;
-    renderCanvas(); generateCode();
-    saveState();
-}
-function addOption() {
-    events[selectedIdx].options.push({ message: 'Option Branch Pathway', nextId: -1 });
-    renderOptions(); renderCanvas(); generateCode();
-    saveState();
-}
-function removeOption(optIdx) {
-    events[selectedIdx].options.splice(optIdx, 1);
-    renderOptions(); renderCanvas(); generateCode();
-    saveState();
-}
-
-function onFieldChange() {
-  const ev = events[selectedIdx];
-  ev.define = document.getElementById('f-define').value.trim().toUpperCase().replace(/\s+/g,'_');
-  ev.message = document.getElementById('f-message').value;
-  document.getElementById('char-count').textContent = ev.message.length;
-  renderCanvas(); generateCode();
-  saveState();
-}
-
-// ── DUPLICATE (Ctrl+D) ──
+// ══════════════════════════════════════════════════════════════════
+// 13. NODE ACTIONS (duplicate, tidy up, grid snap, create/delete)
+// ══════════════════════════════════════════════════════════════════
 function duplicateSelected() {
   const OFFSET = 40;
   const indicesToDupe = selectedIndices.size > 0
@@ -1787,8 +2539,6 @@ function duplicateSelected() {
   saveState();
 }
 
-// ── TIDY UP (left-to-right DAG layout) ──
-// ── TIDY UP (Snap all elements to grid) ──
 function tidyUp() {
   if (events.length === 0) return;
 
@@ -1817,7 +2567,6 @@ function tidyUp() {
   saveState();
 }
 
-// ── GRID SNAP TOGGLE ──
 function toggleGridSnap() {
   gridSnapEnabled = !gridSnapEnabled;
   const btn = document.getElementById('grid-snap-btn');
@@ -1834,7 +2583,7 @@ function newEvent() {
   const cy = (container.clientHeight / 2 - panY) / zoom;
   const x = cx - 125 + (events.length * 25 % 200);
   const y = cy -  60 + (events.length * 45 % 300);
-  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], x, y });
+  events.push({ define: '', message: 'New visual node story data element.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x, y });
   renderCanvas(); selectEvent(events.length - 1);
   saveState();
 }
@@ -1858,6 +2607,9 @@ function deleteEvent() {
   saveState();
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 14. RIGHT PANEL TABS & COLLAPSE TOGGLE
+// ══════════════════════════════════════════════════════════════════
 function switchTab(tab) {
   document.getElementById('tab-edit-btn').className = 'tab-btn' + (tab === 'edit' ? ' active' : '');
   document.getElementById('tab-code-btn').className = 'tab-btn' + (tab === 'code' ? ' active' : '');
@@ -1871,7 +2623,20 @@ function setPanelCollapsed(collapsed) {
   const reopenBtn = document.getElementById('panel-reopen-btn');
   toggleBtn.title = collapsed ? 'Open panel' : 'Close panel';
   reopenBtn.title = 'Expand panel';
-  localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0');
+  try { localStorage.setItem('vidas_secas_panel_collapsed', collapsed ? '1' : '0'); } catch (e) { /* non-critical */ }
+  updateCanvasPreviewButton();
+}
+
+// Shows the floating "preview selected event" button over the canvas only when
+// BOTH are true: the right panel is collapsed (so the in-panel Preview Event
+// button isn't reachable) AND the selected event actually has options to
+// preview. Called whenever either condition could have changed.
+function updateCanvasPreviewButton() {
+  const btn = document.getElementById('canvas-preview-btn');
+  const collapsed = document.body.classList.contains('panel-collapsed');
+  const ev = selectedIdx !== null ? events[selectedIdx] : null;
+  const hasOptions = !!(ev && ev.options && ev.options.length > 0);
+  btn.classList.toggle('visible', collapsed && hasOptions);
 }
 
 function toggleRightPanel() {
@@ -1881,40 +2646,132 @@ function toggleRightPanel() {
 // Restore panel collapsed/expanded state from a previous session
 setPanelCollapsed(localStorage.getItem('vidas_secas_panel_collapsed') === '1');
 
+// ══════════════════════════════════════════════════════════════════
+// 15. CODE GENERATION & FILE IMPORT/EXPORT
+// ══════════════════════════════════════════════════════════════════
 function generateCode() {
-  // 1. Calculate incoming links for all events
-  const incomingCounts = new Array(events.length).fill(0);
-  events.forEach(ev => {
-    (ev.options || []).forEach(opt => {
-      if (opt.nextId >= 0 && opt.nextId < events.length) {
-        incomingCounts[opt.nextId]++;
-      }
-    });
-  });
+  // 1. Same head/leaf classification and index remap the editor UI uses for
+  // its own node badges/labels — see computeEventOrder() for why.
+  const { incomingCounts, headIndices, leafIndices, remap } = computeEventOrder();
+
+  const numMaxRandomEvents = headIndices.length;
+  const numMaxEvents = Math.max(events.length, 1); // avoid declaring a zero-size array on an empty graph
 
   const lines = [];
-  lines.push(`Event events[${events.length}] = {0};`);
-  lines.push('');
-  
-  events.forEach((ev, i) => {
-    const comment = ev.define ? `/* ${ev.define} */` : `/* [${i}] */`;
-    const hasOutgoing = ev.options && ev.options.length > 0;
 
-    // 2. A node starts a chain if it has NO incoming links AND AT LEAST 1 outgoing link
-    if (incomingCounts[i] === 0 && hasOutgoing) {
-      lines.push(`// ---${ev.define ? ev.define : "CHAIN START"}---`);
+  if (events.length > 0 && numMaxRandomEvents === 0) {
+    lines.push('// ⚠ WARNING: every event has an incoming link — there are no "head" events,');
+    lines.push('//   so the random ambient event pool will always be empty.');
+    lines.push('');
+  }
+
+  lines.push(`#define MAX_EVENTS ${numMaxEvents}`);
+  lines.push(`#define MAX_RANDOM_EVENTS ${numMaxRandomEvents} // Indices 0 to ${Math.max(numMaxRandomEvents - 1, 0)} are "head" events — safe to roll randomly`);
+  lines.push('');
+  lines.push(`Event events[MAX_EVENTS] = {0};`);
+  lines.push('');
+
+  // 2. Emit one #define per named event, up front, using each event's NEW
+  // (remapped) index so it matches the array slot it actually ends up in —
+  // sorted by that new index so the block reads top-to-bottom in array order.
+  const namedEvents = events
+    .map((ev, i) => ({ ev, i }))
+    .filter(({ ev }) => !!ev.define)
+    .sort((a, b) => remap[a.i] - remap[b.i]);
+  if (namedEvents.length > 0) {
+    const maxNameLen = Math.max(...namedEvents.map(({ ev }) => ev.define.length));
+    namedEvents.forEach(({ ev, i }) => {
+      lines.push(`#define ${ev.define.padEnd(maxNameLen)} ${remap[i]}`);
+    });
+    lines.push('');
+  }
+
+  // 3. How a given (original, editor-internal) event index should be
+  // *referenced* in generated code — its #define name if it has one,
+  // otherwise its remapped numeric index (never the raw editor index).
+  const ref = (idx) => (idx >= 0 && idx < events.length && events[idx].define) ? events[idx].define : remap[idx];
+
+  // 4. Decide PRINT order separately from the index NUMBERING above: a head
+  // and every event only reachable by walking ITS OWN option chain should be
+  // printed together as one contiguous, single-comment block — even though
+  // numbering-wise the head lives in the low [0, MAX_RANDOM_EVENTS) range and
+  // its leaf descendants live way up in the high range. Walking each head's
+  // options in order (a DFS) and marking nodes as visited handles chains that
+  // loop back on themselves (e.g. an option linking back to an earlier head)
+  // without printing anything twice.
+  const emitted = new Set();
+  const chains = []; // [{ headIdx, nodeIndices: [...] }]
+  function collectChain(startIdx) {
+    const nodeIndices = [];
+    const stack = [startIdx];
+    while (stack.length > 0) {
+      const cur = stack.pop();
+      if (emitted.has(cur)) continue;
+      emitted.add(cur);
+      nodeIndices.push(cur);
+      const opts = events[cur].options || [];
+      for (let k = opts.length - 1; k >= 0; k--) { // push in reverse so DFS visits options in their natural order
+        const nextId = opts[k].nextId;
+        if (nextId >= 0 && nextId < events.length && !emitted.has(nextId)) stack.push(nextId);
+      }
+    }
+    return nodeIndices;
+  }
+  headIndices.forEach(headIdx => {
+    if (emitted.has(headIdx)) return; // already pulled in by an earlier head's chain
+    chains.push({ headIdx, nodeIndices: collectChain(headIdx) });
+  });
+  // Safety net: any leaf never reached from any head (e.g. a cycle made up
+  // entirely of leaves) still needs to be emitted somewhere.
+  const orphanNodeIndices = leafIndices.filter(i => !emitted.has(i));
+  orphanNodeIndices.forEach(i => emitted.add(i));
+
+  // 5. Emit each chain as one block: a single "// ---NAME---" header (only
+  // when the head actually leads somewhere) followed by every node in that
+  // chain, then a blank line before the next block.
+  chains.forEach(({ headIdx, nodeIndices }) => {
+    const headEv = events[headIdx];
+    const headHasOutgoing = headEv.options && headEv.options.length > 0;
+
+    if (headHasOutgoing) {
+      lines.push(`// ---${headEv.define ? headEv.define : "CHAIN START"}---`);
     }
 
-    // Existing generation logic
-    lines.push(`events[${i}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}); ${comment}`);
-    
-    (ev.options || []).forEach(opt => {
-      lines.push(`addOption(&events[${i}], "${escapeCStr(opt.message)}", ${opt.nextId});`);
+    nodeIndices.forEach(i => {
+      const ev = events[i];
+      const comment = ev.define ? `/* ${ev.define} */` : `/* [${remap[i]}] */`;
+      const minD = ev.minDistance ?? 0;
+      const maxD = ev.maxDistance ?? 9999;
+      const reqFlags = flagsToC(ev.requiredFlags);
+      const forbidFlags = flagsToC(ev.forbiddenFlags);
+      lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
+      (ev.options || []).forEach(opt => {
+        const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
+        lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
+      });
     });
-    
-    if (hasOutgoing) lines.push('');
+
+    if (headHasOutgoing) lines.push('');
   });
-  
+
+  if (orphanNodeIndices.length > 0) {
+    lines.push('// ---ORPHANED (has an incoming link, but unreachable from any head — check this chain)---');
+    orphanNodeIndices.forEach(i => {
+      const ev = events[i];
+      const comment = ev.define ? `/* ${ev.define} */` : `/* [${remap[i]}] */`;
+      const minD = ev.minDistance ?? 0;
+      const maxD = ev.maxDistance ?? 9999;
+      const reqFlags = flagsToC(ev.requiredFlags);
+      const forbidFlags = flagsToC(ev.forbiddenFlags);
+      lines.push(`events[${ref(i)}] = createEvent("${escapeCStr(ev.message)}", ${ev.type}, ${minD}, ${maxD}, ${reqFlags}, ${forbidFlags}); ${comment}`);
+      (ev.options || []).forEach(opt => {
+        const nextRef = opt.nextId === -1 ? -1 : ref(opt.nextId);
+        lines.push(`addOption(&events[${ref(i)}], "${escapeCStr(opt.message)}", ${nextRef});`);
+      });
+    });
+    lines.push('');
+  }
+
   document.getElementById('code-output').textContent = lines.join('\n');
 }
 
@@ -2012,40 +2869,41 @@ function copyCode() {
   });
 }
 
-function escapeCStr(s) { return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
-// Seed nodes are offset to the center of the virtual 8000×8000 canvas (CANVAS_SIZE/2 ≈ 4000).
-// Original layout spans ~0–1700 x, ~0–640 y; center of content ≈ (850, 290).
-// Offset = 4000 - 850 = 3150 in X,  4000 - 290 = 3710 in Y  → content sits at canvas center.
+// ══════════════════════════════════════════════════════════════════
+// 16. BOOTSTRAP — seed data & initial load
+// ══════════════════════════════════════════════════════════════════
 const SEED_OX = 3150, SEED_OY = 3710;
 const seed = [
-  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+40 },
-  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+40 },
-  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+40 },
-  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+40 },
-  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+220 },
-  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+310, y: SEED_OY+220 },
-  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+580, y: SEED_OY+220 },
-  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+850, y: SEED_OY+220 },
-  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+40, y: SEED_OY+400 },
-  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], x: SEED_OX+310, y: SEED_OY+400 },
-  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+580, y: SEED_OY+400 },
-  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+40 },
-  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], x: SEED_OX+1450, y: SEED_OY+40 },
-  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+280 },
-  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], x: SEED_OX+1450, y: SEED_OY+280 },
-  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], x: SEED_OX+1150, y: SEED_OY+540 },
-  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], x: SEED_OX+1450, y: SEED_OY+540 },
+  { define: '', message: 'Uma família de Urubus rodeia no céu.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+40 },
+  { define: '', message: 'Muita gente morreu nessa região.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+40 },
+  { define: '', message: 'Um rio seco.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+40 },
+  { define: '', message: 'Um cachorro mendigo olha estranho para vocês.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+850, y: SEED_OY+40 },
+  { define: '', message: 'Longo dia...', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+220 },
+  { define: '', message: 'A vontade é de largar tudo e sair correndo.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+220 },
+  { define: '', message: 'Passam um esqueleto de boi.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+220 },
+  { define: '', message: 'Uma fazenda... Longe demais para pedir água.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+850, y: SEED_OY+220 },
+  { define: '', message: 'Passarinhos piam na distância.', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+40, y: SEED_OY+400 },
+  { define: '', message: 'Pegou a estrada errada!', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+310, y: SEED_OY+400 },
+  { define: '', message: 'Andaram in círculos...', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+580, y: SEED_OY+400 },
+  { define: 'EMPTY_HOUSE', message: 'Found empty house', type: 'EVENT_MESSAGE', options: [{ message: 'Enter', nextId: 12 }, { message: 'Go Away', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+40 },
+  { define: 'EMPTY_HOUSE_ENTER', message: 'Nothing inside...', type: 'EVENT_MESSAGE', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+40 },
+  { define: 'FOUND_STRANGER', message: 'Um estranho chama sua atenção', type: 'EVENT_MESSAGE', options: [{ message: 'Talk', nextId: 14 }, { message: 'Go Away', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+280 },
+  { define: 'STRANGER_TALK', message: 'Estão indo para o litoral?', type: 'EVENT_MESSAGE', options: [{ message: 'Sim', nextId: 15 }, { message: 'Não responder', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+280 },
+  { define: 'STRANGER_SHORTCUT', message: 'Conheço um atalho!', type: 'EVENT_MESSAGE', options: [{ message: 'Seguir', nextId: 9 }, { message: 'Deixar pra lá', nextId: -1 }], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1150, y: SEED_OY+540 },
+  { define: 'STRANGER_WRONG_ROAD', message: 'Pegaram o caminho errado...', type: 'EVENT_DETOUR', options: [], minDistance: 0, maxDistance: 9999, requiredFlags: [], forbiddenFlags: [], x: SEED_OX+1450, y: SEED_OY+540 },
 ];
-// Check for stored history
+
+// Check for stored history — this holds a recent WINDOW of states (see
+// getPersistableHistoryWindow()), not the full in-session MAX_HISTORY worth,
+// so a reload restores as much undo depth as fit in the size budget rather
+// than either the full history (which is what blew the localStorage quota
+// in the first place) or none at all (which just breaks undo across reloads).
 const storedHistory = localStorage.getItem('vidas_secas_history');
 if (storedHistory) {
   const parsedHistory = JSON.parse(storedHistory);
-  historyStack = parsedHistory.stack;
-  historyIndex = parsedHistory.index;
-  
-  // Load the current active state
+  historyStack = parsedHistory.stack || [];
+  historyIndex = parsedHistory.index ?? (historyStack.length - 1);
+
   const currentStateStr = historyStack[historyIndex];
   if (currentStateStr) {
     const parsedState = JSON.parse(currentStateStr);
@@ -2059,10 +2917,28 @@ if (storedHistory) {
   saveState(); // Create initial baseline history state
 }
 
+// Camera position lives in its own key, independent of content history (see
+// persistViewport()). Restore it if we have it; only fitToScreen — which
+// would otherwise clobber whatever we just restored — on a genuine first
+// visit where no viewport has ever been saved.
+const storedViewport = localStorage.getItem(VIEWPORT_KEY);
 renderCanvas();
-fitToScreen();  // Fit all seed nodes into view on first load
-renderForm(); 
+if (storedViewport) {
+  try {
+    const parsedViewport = JSON.parse(storedViewport);
+    if (parsedViewport.panX !== undefined) panX = parsedViewport.panX;
+    if (parsedViewport.panY !== undefined) panY = parsedViewport.panY;
+    if (parsedViewport.zoom !== undefined) zoom = parsedViewport.zoom;
+    updateCanvasTransform();
+  } catch (e) {
+    fitToScreen();
+  }
+} else {
+  fitToScreen();  // First-ever visit — fit all seed nodes into view
+}
+renderForm();
 generateCode();
+
 </script>
 </body>
 </html>
