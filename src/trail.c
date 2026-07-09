@@ -53,11 +53,20 @@ enum State {
 
 typedef struct {
     char name[16];
+    //// bool foundFood;
+    bool dead;
+    bool sick;
+    int health;
+    float velocity;  //TODO: velocidade é necessário?
+} Pet;
+
+typedef struct {
+    char name[16];
     bool dead;
     bool sick;
     int health;
     int energy;
-    float velocity;
+    float velocity;  //TODO: velocidade é necessário?
 } Person;
 
 typedef struct {
@@ -86,13 +95,14 @@ typedef struct {
     int count;
     int money;
     Person member[4];
+    Pet dog;
     Inventory inventory;
     enum RationSize ration;
 } Party;
 
 // Descansar
 // TODO: simular quando comida acabou? 
-void rest(Party *party, int *hours){
+void restParty(Party *party, int *hours){
     
     for (int i = 0; i < 4; i++){
         if (party->member[i].dead) continue;
@@ -105,6 +115,12 @@ void rest(Party *party, int *hours){
         party->member[i].health = clampInt(party->member[i].health, 0, 100);
         party->member[i].energy = clampInt(party->member[i].energy, 0, 100);
     }
+
+    if (!party->dog.dead){
+        party->dog.health += GetRandomValue(1,4);
+        party->dog.health = clampInt(party->dog.health, 0, 100);
+    }
+
     *hours += 1;
 }
 
@@ -127,9 +143,15 @@ typedef struct {
 #define COND_LOW_FOOD     (1 << 0)  // 00000000 00000000 00000000 00000010
 #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
 #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
-#define COND_NIGHT        (1 << 3)
-#define COND_VERY_HOT     (1 << 4)
-#define COND_RAIN         (1 << 5)
+#define COND_DOGLESS      (1 << 3)
+#define COND_NIGHT        (1 << 4)
+#define COND_SLEEPLESS    (1 << 5)
+#define COND_VERY_HOT     (1 << 6)
+#define COND_RAIN         (1 << 7)
+#define COND_FLOOD        (1 << 8)
+#define COND_SICK_DOG     (1 << 9)  // evento sacrificio de baleia
+#define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
+
 
 enum EventType {
     EVENT_MESSAGE,
@@ -198,9 +220,38 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
 }
 
 unsigned int updateActiveFlags(GameData *game){
+
+    //// #define COND_NONE         (0)       // 00000000 00000000 00000000 00000000
+    //// #define COND_LOW_FOOD     (1 << 0)  // 00000000 00000000 00000000 00000010
+    //// #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
+    //// #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
+    //// #define COND_DOGLESS      (1 << 3)
+    // #define COND_NIGHT        (1 << 4)
+    // #define COND_SLEEPLESS    (1 << 5)
+    // #define COND_VERY_HOT     (1 << 6)
+    // #define COND_RAIN         (1 << 7)
+    // #define COND_FLOOD        (1 << 8)
+    //// #define COND_SICK_DOG     (1 << 9)  // evento sacrificio de baleia
+    // #define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
     unsigned int flags = COND_NONE;
     
-    // TODO: check conditions
+    if (game->party.inventory.food < game->party.ration * game->party.count) {
+        flags = flags | COND_LOW_FOOD;
+    }
+
+    if (game->party.money < 5) {
+        flags = flags | COND_LOW_MONEY;
+    }
+
+    if (game->party.count == 1) {
+        flags = flags | COND_ALONE;
+    }
+
+    if (game->party.dog.dead) {
+        flags = flags | COND_DOGLESS;
+    } else if (game->party.dog.sick) {
+        flags = flags | COND_SICK_DOG;
+    }
     
     return flags;
 }
@@ -296,6 +347,7 @@ int main() {
     
     events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
 
+
     // setup gameplay data
     GameData game = {0};
     game.state = STATE_PLAYING;
@@ -314,6 +366,7 @@ int main() {
     
 
     { // setup party
+        // names party
         game.party.count = 4;
         strcpy(game.party.member[0].name, "Fabiano");
         game.party.member[0].velocity = 5;
@@ -324,12 +377,20 @@ int main() {
         strcpy(game.party.member[3].name, "Mais Velho");
         game.party.member[3].velocity = 6;
 
+        strcpy(game.party.dog.name, "Baleia");
+        game.party.dog.velocity = 8;
+
+        // stats party
         for (int i = 0; i < 4; i++) {
             game.party.member[i].health = 100;
             game.party.member[i].energy = 100;
             game.party.member[i].sick = false;
             game.party.member[i].dead = false;
         }
+
+        game.party.dog.health = 100;
+        game.party.dog.sick = false;
+        game.party.dog.dead = false;
 
         // inventory init
         game.party.inventory.ammo = 10;
@@ -356,13 +417,20 @@ int main() {
             game.distance = 0;
             game.state = STATE_PLAYING;
             game.checkpointsVisited = 0;
+            game.party.count = 4;
+
+            // stats party
             for (int i = 0; i < 4; i++) {
                 game.party.member[i].health = 100;
                 game.party.member[i].energy = 100;
                 game.party.member[i].sick = false;
                 game.party.member[i].dead = false;
             }
-            game.party.count = 4;
+
+            game.party.dog.health = 100;
+            game.party.dog.sick = false;
+            game.party.dog.dead = false;
+
             game.party.inventory.ammo = 10;
             game.party.inventory.weapon = 1;
             game.party.inventory.food = 50;
@@ -398,11 +466,6 @@ int main() {
                 fclose(file);
             };
         }
-
-        // Rest
-        if (IsKeyPressed(KEY_D)) {
-            rest(&game.party, &game.hours);
-        }
         
         if (moving){
             if (updateTimer(&moveTimer, GetFrameTime()) == 1) {
@@ -415,6 +478,7 @@ int main() {
                 float velocityParty = 0;
                 int hoursSimulated = 3;
 
+                // people simulate
                 game.party.count = 0;
                 for (int i = 0; i < 4; i++) {
 
@@ -468,33 +532,74 @@ int main() {
                     velocityParty += game.party.member[i].velocity * ((float) game.party.member[i].health / (float) 100) * ((float) game.party.member[i].energy / (float) 100);                        
                 }
 
-                velocityParty = game.party.count > 0 ? (velocityParty / game.party.count) : 0;
+                
+
+                { // simulate dog
+                    // simulate dog sickness
+                    if (!game.party.dog.sick){
+                        int roll = GetRandomValue(1,100);
+                        int chanceOfSickness = 50;
+                        if (roll < chanceOfSickness){
+                            game.party.dog.sick = true;
+                        }
+                    } else {
+                        int roll = GetRandomValue(0,100);
+                        if (roll < 1){
+                            game.party.dog.sick = false;
+                        }
+                    }
+
+                    //// game.party.dog.foundFood = false;
+                    //// simulate dog scavanging (wondering around)
+                    //// {
+                    ////     int roll = GetRandomValue(1,100);
+                    ////     int chanceOfFindingFood = 5;
+                    ////     if (roll < chanceOfFindingFood){
+                    ////         game.party.inventory.food += 4;
+                    ////         game.party.dog.foundFood = true;
+                    ////     }
+                    //// }
+
+                    // simulate health loss (damage)
+                    bool isSick = game.party.dog.sick;
+                    int damage = GetRandomValue(isSick ?  5 : 0, isSick ?  8 : 1);
+
+                    game.party.dog.health -= damage;
+                    if (game.party.dog.health <= 0) {
+                        game.party.dog.health = 0;
+                        game.party.dog.dead = true;
+                    } // clamp health to zero 0 and kill
+                }
+
+                velocityParty = game.party.count > 0 ? (velocityParty / game.party.count) : game.party.dog.velocity;
                 
                 game.distance += velocityParty * hoursSimulated;
                 game.hours += hoursSimulated;
 
 
                 // check gameover
-                if (game.party.count == 0) {
+                if (game.party.count == 0 && game.party.dog.dead == true) {
                     game.state = STATE_GAMEOVER;
                 }
-
-                if (game.distance >= checkpoints.distance[game.checkpointsVisited] && game.checkpointsVisited < checkpoints.numTotal) {
+                // check if reached checkpoint
+                else if (game.distance >= checkpoints.distance[game.checkpointsVisited] && game.checkpointsVisited < checkpoints.numTotal) {
                     game.distance = checkpoints.distance[game.checkpointsVisited];
                     game.state = STATE_STOP_CHECKPOINT;
-                    activeStopMenu = 3;
-                } 
+                    activeStopMenu = 3; // town menu index
+                } else {
+                    // roll eventos aleatorios
+                    updateActiveFlags(&game);
+                    refreshEventPool(game.distance, game.activeFlags);
+                    bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
+                    if (eventShouldHappen) {
+                        int poolIndex = GetRandomValue(0, activePoolCount - 1);
+                        int chosenEventId = activeEventPool[poolIndex];
+                        triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours);
 
-                // eventos aleatorios
-                updateActiveFlags(&game);
-                refreshEventPool(game.distance, game.activeFlags);
-                bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
-                if (eventShouldHappen) {
-                    int poolIndex = GetRandomValue(0, activePoolCount - 1);
-                    int chosenEventId = activeEventPool[poolIndex];
-                    triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours);
-
+                    }
                 }
+
+                
             }
         }
         
@@ -625,6 +730,22 @@ int main() {
                     }
                     DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
                 }
+
+                // Draw dog status bar (dog health)
+                {
+                    int size = 30;
+                    int posY = windowHeight - 200;
+                    Color textColor = game.party.dog.health == 0 ? RED : WHITE;
+                    DrawText(game.party.dog.name, 30, posY, 30, textColor);
+                    DrawText(TextFormat("%03d", game.party.dog.health), 230, posY, size, textColor);
+                    if (game.party.dog.health == 0) {
+                        DrawText("(dead)", 310, posY, 30, textColor);
+                        
+                    } else if (game.party.dog.sick) {
+                        DrawText("(sick)", 310, posY, 30, textColor);
+                        
+                    }
+                }
             }
 
             // Stop Menu
@@ -652,7 +773,7 @@ int main() {
 
                     switch (activeStopMenu) {
                     case 0 /* Party */:  
-                        if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) rest(&game.party, &game.hours);
+                        if (GuiButton((Rectangle) {40, 40, width, height}, "Rest")) restParty(&game.party, &game.hours);
                         // Draw status bar (party health)
                         for (int i = 3; i >= 0; i--) {
                             int size = 30;
@@ -668,6 +789,22 @@ int main() {
                             }
 
                             DrawText(TextFormat("energy: %03d", game.party.member[i].energy), 410, posY, size, textColor);
+                        }
+
+                        // Draw dog status bar (dog health)
+                        {
+                            int size = 30;
+                            int posY = windowHeight - 300;
+                            Color textColor = game.party.dog.health == 0 ? RED : WHITE;
+                            DrawText(game.party.dog.name, 30, posY, 30, textColor);
+                            DrawText(TextFormat("%03d", game.party.dog.health), 230, posY, size, textColor);
+                            if (game.party.dog.health == 0) {
+                                DrawText("(dead)", 310, posY, 30, textColor);
+                                
+                            } else if (game.party.dog.sick) {
+                                DrawText("(sick)", 310, posY, 30, textColor);
+                                
+                            }
                         }
                         
                         { // Draw Hours, Distance, Food, Party Count
