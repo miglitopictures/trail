@@ -330,17 +330,16 @@ typedef struct {
 #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
 #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
 #define COND_DOGLESS      (1 << 3)
-#define COND_COWLESS      (1 << 4)
-#define COND_SICK_DOG     (1 << 5)  // evento sacrificio de baleia
-#define COND_NIGHT        (1 << 6)
-#define COND_VERY_HOT     (1 << 7)
-#define COND_RAIN         (1 << 8)
-#define COND_FLOOD        (1 << 9)
+#define COND_SICK_DOG     (1 << 4)  // evento sacrificio de baleia
+#define COND_NIGHT        (1 << 5)
+#define COND_VERY_HOT     (1 << 6)
+#define COND_RAIN         (1 << 7)
+#define COND_FLOOD        (1 << 8)
+#define COND_COWLESS      (1 << 9)
 #define COND_SLEEPLESS    (1 << 10)
 #define COND_GODLESS      (1 << 11)
 #define COND_FAITHFUL     (1 << 12)
-#define COND_SLEEPLESS    (1 << 13)
-#define COND_TRAUMA       (1 << 14) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
+#define COND_TRAUMA       (1 << 13) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
 
 
 enum EventType {
