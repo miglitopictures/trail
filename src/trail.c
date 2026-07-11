@@ -25,18 +25,23 @@ int clampInt(int value, int min, int max){
 #define DAY 10
 #define HOUR 6
 
-const char* startDateString() {
+const char* startingDateString() {
     return TextFormat("%02d/%02d/%04d | %02d:00", DAY, MON, YEAR, HOUR);
 }
 
-const char* currentDateString(int totalHours) {
+struct tm startingDate() {
     struct tm startDate = {0};
     startDate.tm_year = YEAR - 1900;
     startDate.tm_mon = MON;
     startDate.tm_mday = DAY;
     startDate.tm_hour = HOUR;
+    return startDate;
+}
 
+const char* currentDateString(int totalHours) {
+    struct tm startDate = startingDate();
     time_t startSeconds = mktime(&startDate);
+
     time_t currentSeconds = startSeconds + (totalHours * 3600);
     struct tm *currentDate = localtime(&currentSeconds);
 
@@ -46,6 +51,22 @@ const char* currentDateString(int totalHours) {
         currentDate->tm_year + 1900, 
         currentDate->tm_hour
     );
+}
+
+struct tm* currentDate(int totalHours) {
+    struct tm startDate = startingDate();
+    time_t startSeconds = mktime(&startDate);
+
+    time_t currentSeconds = startSeconds + (totalHours * 3600);
+
+    return localtime(&currentSeconds);
+}
+
+int currentMonthInt(int totalHours) {
+    struct tm startDate = startingDate();
+    time_t startSeconds = mktime(&startDate);
+    time_t currentSeconds = startSeconds + (totalHours * 3600);
+    return localtime(&currentSeconds)->tm_mon;
 }
 
 // SPRITE ANIMATION (spritesheets)
@@ -310,6 +331,54 @@ void simulateParty(Party *party, float *distance, int *hours){
     *hours += hoursSimulated;
 }
 
+enum Weather {
+    VERY_HOT,     // 0
+    HOT,          // 1
+    COOL,         // 2
+    RAINY,        // 3
+    VERY_RAINY,   // 4
+};
+
+
+void simulateWeather(enum Weather *weather, int currentMonth){
+
+    if (currentMonth > 4) // JAN - MAIO
+    {
+        if (GetRandomValue(0,100) < 1) { // 1%
+            *weather = RAINY;
+        } else {
+            *weather = GetRandomValue(0, 1); // HOT or VERY_HOT
+        }
+    }
+
+    else  // MAR - DEZ
+    {
+        if (*weather == VERY_RAINY)
+        {
+            if (GetRandomValue(0,100) < 10) { // 1%
+                *weather = RAINY;
+            }
+        }
+        else if (*weather == RAINY)
+        {
+            if (GetRandomValue(0,100) < 70) { // 1%
+                *weather = COOL;
+            } else if (GetRandomValue(0,100) < 10){
+                *weather = VERY_RAINY;
+            }
+        }
+        else
+        {
+            if (GetRandomValue(0,100) < 10) { // 1%
+                *weather = RAINY;
+            } else {
+                *weather = GetRandomValue(0, 2);
+            }
+        }
+        
+    }
+}
+
 typedef struct {
     int weather; // TODO: pending implementation (weather simulation)
     int hours;
@@ -483,6 +552,7 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, enum Chec
 
 int main() {
     //*___SETUP___*//
+    SetRandomSeed((unsigned int)time(NULL));
     
     Checkpoints checkpoints = {0}; 
     {  // add checkpoints data
@@ -914,15 +984,15 @@ int main() {
                         GuiButton((Rectangle) {40, 120, width, height}, "Trade");
                         GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
                         break;
-                    case 3 /* Town */:  
-                            { // Draw city
-                                int size = 30;
-                                int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
-                                int x = windowWidth / 2 - width / 2;
-                                int y =  windowHeight / 2;
-                                DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
-                                DrawText(checkpoints.name[game.checkpointsVisited], x, y, size, BLACK);
-                            }
+                    case 3 /* Checkpoint */:  
+                        { // Draw city
+                            int size = 30;
+                            int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
+                            int x = windowWidth / 2 - width / 2;
+                            int y =  windowHeight / 2;
+                            DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
+                            DrawText(checkpoints.name[game.checkpointsVisited], x, y, size, BLACK);
+                        }
                         switch (checkpoints.type[game.checkpointsVisited])
                         {
                         case TOWN:
@@ -936,7 +1006,6 @@ int main() {
                         default:
                             break;
                         }
-                        
                         break;
                     default:
                         break;
