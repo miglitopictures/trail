@@ -342,9 +342,18 @@ enum Weather {
 
 void simulateWeather(enum Weather *weather, int currentMonth){
 
-    if (currentMonth > 4) // JAN - MAIO
+    if (currentMonth > 4 && *weather != VERY_RAINY) // JAN - MAIO
     {
-        if (GetRandomValue(0,100) < 1) { // 1%
+        if (*weather == RAINY)
+        {
+            if (GetRandomValue(0,100) < 70) { // 70%
+                *weather = COOL;
+            } else if (GetRandomValue(0,100) < 10){
+                *weather = VERY_RAINY;
+            }
+        }
+
+        if (GetRandomValue(0,100) < 2) { // 1%
             *weather = RAINY;
         } else {
             *weather = GetRandomValue(0, 1); // HOT or VERY_HOT
@@ -355,13 +364,13 @@ void simulateWeather(enum Weather *weather, int currentMonth){
     {
         if (*weather == VERY_RAINY)
         {
-            if (GetRandomValue(0,100) < 10) { // 1%
+            if (GetRandomValue(0,100) < 10) { // 10%
                 *weather = RAINY;
             }
         }
         else if (*weather == RAINY)
         {
-            if (GetRandomValue(0,100) < 70) { // 1%
+            if (GetRandomValue(0,100) < 70) { // 70%
                 *weather = COOL;
             } else if (GetRandomValue(0,100) < 10){
                 *weather = VERY_RAINY;
@@ -369,7 +378,7 @@ void simulateWeather(enum Weather *weather, int currentMonth){
         }
         else
         {
-            if (GetRandomValue(0,100) < 10) { // 1%
+            if (GetRandomValue(0,100) < 10) { // 10%
                 *weather = RAINY;
             } else {
                 *weather = GetRandomValue(0, 2);
@@ -380,7 +389,7 @@ void simulateWeather(enum Weather *weather, int currentMonth){
 }
 
 typedef struct {
-    int weather; // TODO: pending implementation (weather simulation)
+    enum Weather weather; // TODO: pending implementation (weather simulation)
     int hours;
     float distance;
 
