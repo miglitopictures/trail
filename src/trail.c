@@ -156,6 +156,7 @@ enum RationSize {
 typedef struct {
     int count;
     int money;
+    int faith; // TODO: pending implementation
     Person member[4];
     Pet dog;
     Inventory inventory;
@@ -310,7 +311,7 @@ void simulateParty(Party *party, float *distance, int *hours){
 }
 
 typedef struct {
-    int weather; // TODO: simulate weather
+    int weather; // TODO: pending implementation (weather simulation)
     int hours;
     float distance;
 
@@ -329,13 +330,17 @@ typedef struct {
 #define COND_LOW_MONEY    (1 << 1)  // 00000000 00000000 00000000 00000010
 #define COND_ALONE        (1 << 2)  // 00000000 00000000 00000000 00000100 ...
 #define COND_DOGLESS      (1 << 3)
-#define COND_SICK_DOG     (1 << 4)  // evento sacrificio de baleia
-#define COND_NIGHT        (1 << 5)
-// #define COND_VERY_HOT     (1 << 5)
-// #define COND_RAIN         (1 << 6)
-// #define COND_FLOOD        (1 << 7)
-// #define COND_SLEEPLESS    (1 << 9)
-// #define COND_TRAUMA       (1 << 10) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
+#define COND_COWLESS      (1 << 4)
+#define COND_SICK_DOG     (1 << 5)  // evento sacrificio de baleia
+#define COND_NIGHT        (1 << 6)
+#define COND_VERY_HOT     (1 << 7)
+#define COND_RAIN         (1 << 8)
+#define COND_FLOOD        (1 << 9)
+#define COND_SLEEPLESS    (1 << 10)
+#define COND_GODLESS      (1 << 11)
+#define COND_FAITHFUL     (1 << 12)
+#define COND_SLEEPLESS    (1 << 13)
+#define COND_TRAUMA       (1 << 14) // se apanhar da policia ou escolher matar baleia ou se a familia inteira morrer
 
 
 enum EventType {
@@ -454,22 +459,22 @@ void refreshEventPool(float currentDistance, unsigned int activeFlags) {
 
 #define MAX_CHECKPOINTS 32
 
-// TODO: eventualmente vamos ter tipos de checkpoints?
-// enum CheckpointType {
-//     TOWN,
-//     FARM,
-//     SITE
-// };
+enum CheckpointType {
+    TOWN,
+    SITE,
+};
 
 typedef struct {
+    char name[MAX_CHECKPOINTS][32];
     int numTotal;
-    Inventory inventory[MAX_CHECKPOINTS];
+    enum CheckpointType type[MAX_CHECKPOINTS];
     float distance[MAX_CHECKPOINTS];
-    char  name[MAX_CHECKPOINTS][32];
+    Inventory inventory[MAX_CHECKPOINTS];
 } Checkpoints;
 
-void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, Inventory inventory){
+void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, enum CheckpointType type, Inventory inventory){
     checkpoints->distance[checkpoints->numTotal] = distance;
+    checkpoints->type[checkpoints->numTotal] = type;
     checkpoints->inventory[checkpoints->numTotal] = inventory;
     strcpy(checkpoints->name[checkpoints->numTotal], name);
     checkpoints->numTotal++;
@@ -482,9 +487,11 @@ int main() {
     
     Checkpoints checkpoints = {0}; 
     {  // add checkpoints data
-        addCheckpoint(&checkpoints, "Petrolina",           30, (Inventory){50, 200,  10, 40});
-        addCheckpoint(&checkpoints, "Serra Talhada",       50, (Inventory){50, 200,  10, 10});
-        addCheckpoint(&checkpoints, "Carnabeira da Penha", 80, (Inventory){15, 249, 100, 23});
+        addCheckpoint(&checkpoints, "Abandoned House",      30, SITE,(Inventory){50, 200,  10, 40});
+        addCheckpoint(&checkpoints, "The Cave",             60, SITE,(Inventory){ 0,   0,   0,  2});
+        addCheckpoint(&checkpoints, "Petrolina",            90, TOWN,(Inventory){50, 200,  10, 40});
+        addCheckpoint(&checkpoints, "Serra Talhada",       110, TOWN,(Inventory){50, 200,  10, 10});
+        addCheckpoint(&checkpoints, "Carnabeira da Penha", 140, TOWN,(Inventory){15, 249, 100, 23});
         // (Inventory) {food, ammo, weapon, footwear}
     }
 
@@ -829,11 +836,29 @@ int main() {
                 // #define SUBMENU_REST  2
                 if (activeStopSubmenu == SUBMENU_NONE) {
 
-                    const char* options = inCheckpoint? "Party;Faith;Supply;Town" : "Party;Faith;Supply";  
+                    // const char* base = "Party;Faith;Supply";
+                    char* options;
+                    char* leaveText;
+                    if (inCheckpoint){
+                        switch (checkpoints.type[game.checkpointsVisited])
+                        {
+                        case TOWN:
+                            strcpy(options, "Party;Faith;Supply;Town");
+                            break;
+                        case SITE:
+                            strcpy(options, TextFormat("Party;Faith;Supply;%s", checkpoints.name[game.checkpointsVisited]));
+                            break;
+                        default:
+                            break;
+                        }
+                        strcpy(leaveText, "Leave");
+                    } else {
+                        strcpy(options, "Party;Faith;Supply");
+                        strcpy(leaveText, "Back");
+                    }
+                      
                     GuiToggleGroup((Rectangle){ 0,  windowHeight - height, width, height }, options, &activeStopMenu);
                     
-                    
-                    const char* leaveText = inCheckpoint? "Leave" : "Back";  
                     if (GuiButton((Rectangle) {windowWidth - width, windowHeight - height, width, height}, leaveText)) {
                         if (inCheckpoint) game.checkpointsVisited++; // leave checkpoint
                         game.state = STATE_PLAYING;
@@ -891,17 +916,28 @@ int main() {
                         GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
                         break;
                     case 3 /* Town */:  
-                        
-                        { // Draw city
-                            int size = 30;
-                            int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
-                            int x = windowWidth / 2 - width / 2;
-                            int y =  windowHeight / 2;
-                            DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
-                            DrawText(checkpoints.name[game.checkpointsVisited], x, y, size, BLACK);
+                            { // Draw city
+                                int size = 30;
+                                int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
+                                int x = windowWidth / 2 - width / 2;
+                                int y =  windowHeight / 2;
+                                DrawRectangle(x-10, y-10, width+20, size+20, WHITE);
+                                DrawText(checkpoints.name[game.checkpointsVisited], x, y, size, BLACK);
+                            }
+                        switch (checkpoints.type[game.checkpointsVisited])
+                        {
+                        case TOWN:
+                            if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeStopSubmenu = SUBMENU_BUY;
+                            if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeStopSubmenu = SUBMENU_SELL;
+                            break;
+                        case SITE:
+                            if (GuiButton((Rectangle) {40, 40, width, height}, "Explore"));
+                            if (GuiButton((Rectangle) {40, 120, width, height},   "Call"));
+                            break;
+                        default:
+                            break;
                         }
-                        if (GuiButton((Rectangle) {40, 40, width, height}, "Buy"))   activeStopSubmenu = SUBMENU_BUY;
-                        if (GuiButton((Rectangle) {40, 120, width, height}, "Sell")) activeStopSubmenu = SUBMENU_SELL;
+                        
                         break;
                     default:
                         break;
