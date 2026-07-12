@@ -432,6 +432,22 @@ typedef struct {
     int nextId;
 } Option;
 
+typedef struct {
+    int hours;
+    int money;
+    Inventory inventory;
+} Effects;
+
+
+Effects* createEffect(int hours, int money, Inventory inventory){
+    Effects *effect = malloc(sizeof(Effects));
+    if (!effect) return NULL;
+    effect->hours = hours;
+    effect->money = money;
+    effect->inventory = inventory;
+    return effect;
+};
+
 struct Event {
     char message[256];
     enum EventType type;
@@ -447,12 +463,14 @@ struct Event {
 
     int numOptions;
     Option options[4];
+    Effects *effects;
 };
 
-Event createEvent(char *message, enum EventType type, float minDistance, float maxDistance, unsigned int requiredFlags, unsigned int forbiddenFlags){
+Event createEvent(char *message, enum EventType type, Effects *effects, float minDistance, float maxDistance, unsigned int requiredFlags, unsigned int forbiddenFlags){
     Event event = {0};
     strcpy(event.message, message);
     event.type = type;
+    event.effects = effects;
     event.minDistance = minDistance;
     event.maxDistance = maxDistance;
     event.requiredFlags = requiredFlags;
@@ -474,15 +492,18 @@ void addOption(Event *e, char *message, int nextIndex){
     e->numOptions++;
 }
 
-void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *hours){
+void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *hours, int *partyMoney, Inventory *partyInventory){
     *currentEvent = eventId;  // set new id
     *gameState = STATE_EVENT; // set gamestate
-    
-    if (events[eventId].type == EVENT_DETOUR) {
-        int hoursLost = GetRandomValue(3,8); // sorteia horas pedidas
-        *hours += hoursLost; // aplica horas perdidas
-        // TODO: isso aqui esta gerando um bug ao dar load multiplas vezes (Perdeu 6 horas.. Perdeu 7 horas...)
-        strcpy(events[*currentEvent].message, TextFormat("%s Perdeu %d horas.", events[*currentEvent].message, hoursLost)); //edita mensagem para falar quantas horas perdeu
+
+    if (events[eventId].effects){
+        *hours += events[eventId].effects->hours;
+        *partyMoney += events[eventId].effects->money;
+        partyInventory->ammo += events[eventId].effects->inventory.ammo;
+        partyInventory->food += events[eventId].effects->inventory.food;
+        partyInventory->footwear += events[eventId].effects->inventory.footwear;
+        partyInventory->weapon += events[eventId].effects->inventory.weapon;
+        // continue here
     }
 }
 
@@ -575,46 +596,47 @@ int main() {
 
 
     { // populating the event list
-        events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[3] = createEvent("Um cachorro selvagem olha estranho para vocês.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[4] = createEvent("Longo dia...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
-        events[9] = createEvent("Pegou a estrada errada!", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
-        events[10] = createEvent( "Andaram em círculos...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+        events[0] = createEvent("Uma família de Urubus rodeia no céu.", EVENT_MESSAGE,NULL,0, 9999, COND_NONE, COND_NONE);
+
+        events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, NULL, 0, 9999, COND_NONE, COND_NONE);
+        events[3] = createEvent("Um cachorro selvagem olha estranho para vocês.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[4] = createEvent("Longo dia...", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[9] = createEvent("Pegou a estrada errada! Perdeu 6 horas.", EVENT_MESSAGE, createEffect(-6,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
+        events[10] = createEvent( "Andaram em círculos... Perdeu 3 horas.", EVENT_MESSAGE, createEffect(-3,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
         // eventEmptyHouse
         #define EMPTY_HOUSE        11
 
-        events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
+        events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, NULL , 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
         addOption(&events[EMPTY_HOUSE], "Enter", 32);
         addOption(&events[EMPTY_HOUSE], "Go Away", -1);
 
-        events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
 
         // eventFoundStranger
         #define FOUND_STRANGER  12
 
-        events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         addOption(&events[FOUND_STRANGER], "Talk",     33);
         addOption(&events[FOUND_STRANGER], "Go Away",  -1);
         
-        events[33] = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[33] = createEvent("Estão indo para o litoral?", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         addOption(&events[33], "Sim",           34);
         addOption(&events[33], "Não responder", -1);
 
-        events[34]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_NONE);
+        events[34]   = createEvent("Conheço um atalho!", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         addOption(&events[34], "Seguir",         35);
         addOption(&events[34], "Deixar pra lá", -1);
         
-        events[35] = createEvent("Pegaram o caminho errado...", EVENT_DETOUR, 0, 9999, COND_NONE, COND_NONE);
+        events[35] = createEvent("Pegaram o caminho errado... Perdeu 4 horas.", EVENT_MESSAGE, createEffect(-4,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
 
         // eventEmptyHouse
         #define DOG_FOUND_FOOD        13
-        events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+        events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
 
     }
 
@@ -739,7 +761,7 @@ int main() {
                     if (eventShouldHappen) {
                         int poolIndex = GetRandomValue(0, activePoolCount - 1);
                         int chosenEventId = activeEventPool[poolIndex];
-                        triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours);
+                        triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours, &game.party.money, &game.party.inventory);
 
                     }
                 }
@@ -815,7 +837,7 @@ int main() {
                         
                         if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),540,opWidth,40}, events[game.currentEvent].options[i].message)) {
                             if (events[game.currentEvent].options[i].nextId != -1) {
-                                triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours);
+                                triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours, &game.party.money, &game.party.inventory);
                             } else {
                                 game.state = STATE_PLAYING;
                             }
@@ -1044,6 +1066,13 @@ int main() {
     }
 
     UnloadTexture(spriteFamilia.texture);
+
+    for (int i = 0; i < MAX_EVENTS; i++) {
+        if (events[i].effects != NULL) {
+            free(events[i].effects);
+        }
+    }
+
     CloseWindow();
     return 0;
 }
