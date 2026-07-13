@@ -840,7 +840,7 @@ int main() {
                 int size = 30;
                 int width = MeasureText(events[game.currentEvent].message, size);
                 int x = windowWidth / 2 - width / 2;
-                int y =  windowHeight / 2;
+                int y =  (windowHeight / 2) - 100;
 
                 if (events[game.currentEvent].numOptions == 0) {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
@@ -856,7 +856,7 @@ int main() {
                     for (int i = 0; i < events[game.currentEvent].numOptions; i++)
                     {
                         
-                        if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),540,opWidth,40}, events[game.currentEvent].options[i].message)) {
+                        if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),y+60,opWidth,40}, events[game.currentEvent].options[i].message)) {
                             if (events[game.currentEvent].options[i].nextId != -1) {
                                 triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours, &game.party.money, &game.party.inventory);
                             } else {
@@ -913,7 +913,7 @@ int main() {
                     DrawText(TextFormat("Alive: %d", game.party.count),         30,  90, size, WHITE);
                     DrawText(TextFormat("Money: %d", game.party.money),         30, 120, size, WHITE);
                     DrawText(TextFormat("Events: %d", activePoolCount),         30, 150, size, WHITE);
-                    DrawText(TextFormat("wSimCounter: %d", game.weatherSimCounter),         30, 180, size, WHITE);
+                    // DrawText(TextFormat("wSimCounter: %d", game.weatherSimCounter),         30, 180, size, WHITE);
                 }
 
 
