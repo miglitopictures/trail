@@ -122,8 +122,8 @@ int updateTimer(Timer *timer, double deltaTime){
 }
 
 enum State {
-    STATE_START,
-    STATE_MENU,
+    STATE_START, // TODO: pending implentation!
+    STATE_MENU,  // TODO: pending implentation!
 
     STATE_PLAYING,
     STATE_STOP,
@@ -131,7 +131,7 @@ enum State {
     STATE_EVENT,
 
     STATE_GAMEOVER,
-    STATE_WIN
+    STATE_WIN   // TODO: pending implentation!
 };
 
 typedef struct {
@@ -184,26 +184,30 @@ typedef struct {
     enum RationSize ration;
 } Party;
 
+#define PERSON_MAX_HEALTH 300
+#define PERSON_MAX_ENERGY 300
+#define DOG_MAX_HEALTH 100
+
 void setupParty(Party *party){
 
     party->count = 4;
 
     // stats party
     for (int i = 0; i < 4; i++) {
-        party->member[i].health = 100;
-        party->member[i].energy = 100;
+        party->member[i].health = PERSON_MAX_HEALTH;
+        party->member[i].energy = PERSON_MAX_ENERGY;
         party->member[i].sick = false;
         party->member[i].dead = false;
     }
 
-    party->dog.health = 100;
+    party->dog.health = DOG_MAX_HEALTH;
     party->dog.sick = false;
     party->dog.dead = false;
 
     // inventory init
     party->inventory.ammo = 10;
     party->inventory.weapon = 1;
-    party->inventory.food = 50;
+    party->inventory.food = 120;
     party->inventory.footwear = 4;
     party->money = 70;
     party->ration = MEDIUM;
@@ -222,14 +226,14 @@ void restParty(Party *party, int *hours){
 
         party->member[i].health += GetRandomValue(0,3);
         party->member[i].energy += GetRandomValue(2,10);
-        party->member[i].health = clampInt(party->member[i].health, 0, 100);
-        party->member[i].energy = clampInt(party->member[i].energy, 0, 100);
+        party->member[i].health = clampInt(party->member[i].health, 0, PERSON_MAX_HEALTH);
+        party->member[i].energy = clampInt(party->member[i].energy, 0, PERSON_MAX_ENERGY);
     }
 
     // dog
     if (!party->dog.dead){
         party->dog.health += GetRandomValue(1,4);
-        party->dog.health = clampInt(party->dog.health, 0, 100);
+        party->dog.health = clampInt(party->dog.health, 0, DOG_MAX_HEALTH);
     }
 
     *hours += 1;
@@ -293,7 +297,7 @@ void simulateParty(Party *party, float *distance, int *hours){
             party->count++;
 
             // soma velocidades para gerar media
-            velocityParty += party->member[i].velocity * ((float) party->member[i].health / (float) 100) * ((float) party->member[i].energy / (float) 100);                        
+            velocityParty += party->member[i].velocity * ((float) party->member[i].health / (float) PERSON_MAX_HEALTH) * ((float) party->member[i].energy / (float) PERSON_MAX_ENERGY);                        
         }
     }
 
@@ -339,8 +343,13 @@ enum Weather {
     VERY_RAINY,   // 4
 };
 
+#define WEATHER_SIM_STEP 4
 
-void simulateWeather(enum Weather *weather, int currentMonth){
+void simulateWeather(enum Weather *weather, int *weatherSimCounter, int currentMonth){
+
+    *weatherSimCounter = (*weatherSimCounter + 1) % WEATHER_SIM_STEP;
+
+    if (*weatherSimCounter != 0) return;
 
     if (currentMonth > 4 && *weather != VERY_RAINY) // JAN - MAIO
     {
@@ -389,7 +398,8 @@ void simulateWeather(enum Weather *weather, int currentMonth){
 }
 
 typedef struct {
-    enum Weather weather; // TODO: pending implementation (weather simulation)
+    enum Weather weather;
+    int weatherSimCounter;
     int hours;
     float distance;
 
@@ -606,8 +616,8 @@ int main() {
         events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
-        events[9] = createEvent("Pegou a estrada errada! Perdeu 6 horas.", EVENT_MESSAGE, createEffect(-6,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
-        events[10] = createEvent( "Andaram em círculos... Perdeu 3 horas.", EVENT_MESSAGE, createEffect(-3,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
+        events[9] = createEvent("Pegou a estrada errada! Perdeu 6 horas.", EVENT_MESSAGE, createEffect(6,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
+        events[10] = createEvent( "Andaram em círculos... Perdeu 3 horas.", EVENT_MESSAGE, createEffect(3,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
         // eventEmptyHouse
         #define EMPTY_HOUSE        11
 
@@ -632,17 +642,21 @@ int main() {
         addOption(&events[34], "Seguir",         35);
         addOption(&events[34], "Deixar pra lá", -1);
         
-        events[35] = createEvent("Pegaram o caminho errado... Perdeu 4 horas.", EVENT_MESSAGE, createEffect(-4,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
+        events[35] = createEvent("Pegaram o caminho errado... Perdeu 4 horas.", EVENT_MESSAGE, createEffect(4,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
 
         // eventEmptyHouse
         #define DOG_FOUND_FOOD        13
-        events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+        events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, createEffect(0,0,(Inventory){.ammo=0, .food=4, .footwear=0, .weapon=0}) , 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
 
     }
 
     // setup gameplay data
     GameData game = {0};
     game.state = STATE_PLAYING;
+
+    game.weatherSimCounter = 0;
+    game.weather = VERY_HOT;
+
     game.hours = 0;
     game.distance = 0;
 
@@ -688,9 +702,14 @@ int main() {
 
         // Restart
         if (IsKeyPressed(KEY_R)) {
+            game.state = STATE_PLAYING;
+            
             game.hours = 0;
             game.distance = 0;
-            game.state = STATE_PLAYING;
+
+            game.weatherSimCounter = 0;
+            game.weather = VERY_HOT;
+            
             game.checkpointsVisited = 0;
             setupParty(&game.party);
         }
@@ -743,6 +762,8 @@ int main() {
                 resetTimer(&moveTimer);
 
                 simulateParty(&game.party, &game.distance, &game.hours);
+
+                simulateWeather(&game.weather, &game.weatherSimCounter, currentMonthInt(game.hours));
 
                 // check gameover
                 if (game.party.count == 0 && game.party.dog.dead == true) {
@@ -877,17 +898,22 @@ int main() {
 
                 
                 { // Draw Hours, Distance, Food, Party Count
+                    char *weatherText[5] = {"VERY HOT", "HOT", "COOL", "RAINY", "VERY RAINY"};
                     int size = 30;
                     {
                         int width = MeasureText(currentDateString(game.hours), size);
                         DrawText(currentDateString(game.hours), windowWidth - width - 30, 30, size, WHITE);
-
+                    }
+                    {
+                        int width = MeasureText(weatherText[game.weather], size);
+                        DrawText(weatherText[game.weather], windowWidth - width - 30, 60, size, WHITE);
                     }
                     DrawText(TextFormat("Distância: %.2fKm", game.distance),    30,  30, size, WHITE);
                     DrawText(TextFormat("Food: %d", game.party.inventory.food), 30,  60, size, WHITE);
                     DrawText(TextFormat("Alive: %d", game.party.count),         30,  90, size, WHITE);
                     DrawText(TextFormat("Money: %d", game.party.money),         30, 120, size, WHITE);
                     DrawText(TextFormat("Events: %d", activePoolCount),         30, 150, size, WHITE);
+                    DrawText(TextFormat("wSimCounter: %d", game.weatherSimCounter),         30, 180, size, WHITE);
                 }
 
 
