@@ -78,9 +78,9 @@ typedef struct {
     int currentFrame;
 } Sprite;
 
-Sprite createSprite(char *taxturePath, Vector2 frameSize, int frameCount, int numCols){
+Sprite createSprite(char *texturePath, Vector2 frameSize, int frameCount, int numCols){
     Sprite sprite = { 0 }; 
-    sprite.texture = LoadTexture(taxturePath);
+    sprite.texture = LoadTexture(texturePath);
     sprite.frameSize = frameSize;
     sprite.frameCount = frameCount;
     sprite.numCols = numCols;
@@ -134,6 +134,7 @@ enum State {
     STATE_WIN   // TODO: pending implentation!
 };
 
+// cachorro tem menos vida, mas talvez pode ter energia que diminui e quando zera comeca  aperder vida
 typedef struct {
     char name[16];
     //// bool foundFood;
@@ -152,11 +153,13 @@ typedef struct {
     float velocity;  //TODO: velocidade é necessário?
 } Person;
 
+
+// TODO: sera que os itens do inventorio tem um peso que afeta o quanto o personagem cansa durante a caminhada? ()
 typedef struct {
     int food;
     int ammo;
     int weapon;
-    int footwear;
+    int footwear; // (struct que tem um int desgaste)
 } Inventory;
 
 int buy(int *sellerIten, int *buyerIten, int price, int *wallet){
@@ -177,7 +180,9 @@ enum RationSize {
 typedef struct {
     int count;
     int money;
-    int faith; // TODO: pending implementation
+    
+    int faith; // TODO: pending implementation (itens, devoto)
+
     Person member[4];
     Pet dog;
     Inventory inventory;
@@ -207,7 +212,7 @@ void setupParty(Party *party){
     // inventory init
     party->inventory.ammo = 10;
     party->inventory.weapon = 1;
-    party->inventory.food = 120;
+    party->inventory.food = 1200;
     party->inventory.footwear = 4;
     party->money = 70;
     party->ration = MEDIUM;
@@ -280,13 +285,16 @@ void simulateParty(Party *party, float *distance, int *hours){
 
             // simulate health loss (damage)
             bool isSick = party->member[i].sick;
+
             int damage = GetRandomValue(isSick || !couldEat ? 1 : 0, 5);
+
             damage = damage * (isSick ? 2 : 1); // if sick
             damage = damage * (party->member[i].energy == 0 ? 2 : 1); // if exausted
             damage = damage * (4 - party->ration); // ration size dependent health
             damage = damage * (couldEat? 1 : 2);
 
             party->member[i].health -= damage;
+            
             if (party->member[i].health <= 0) {
                 party->member[i].health = 0;
                 party->member[i].dead = true;
@@ -421,8 +429,8 @@ typedef struct {
 #define COND_SICK_DOG     (1 << 4)  // evento sacrificio de baleia
 #define COND_NIGHT        (1 << 5)
 #define COND_VERY_HOT     (1 << 6)
-#define COND_RAIN         (1 << 7)
-#define COND_FLOOD        (1 << 8)
+#define COND_RAINY        (1 << 7)
+#define COND_VERY_RAINY   (1 << 8)
 #define COND_COWLESS      (1 << 9)
 #define COND_SLEEPLESS    (1 << 10)
 #define COND_GODLESS      (1 << 11)
@@ -534,7 +542,16 @@ unsigned int updateActiveFlags(GameData *game){
     }
 
     int timeOfDay = game->hours % 24;
-    if (timeOfDay >= 18 && timeOfDay < 6) flags |= COND_NIGHT;
+    if (timeOfDay >= 12) flags |= COND_NIGHT;
+
+    if (game->weather == VERY_HOT) {
+        flags |= COND_VERY_HOT;
+    } else if (game->weather == RAINY){
+        flags |= COND_RAINY;
+    } else if (game->weather == VERY_RAINY){
+        flags |= COND_VERY_RAINY;
+    }
+
     
     return flags;
 }
@@ -592,15 +609,18 @@ void addCheckpoint(Checkpoints *checkpoints, char* name, int distance, enum Chec
 
 int main() {
     //*___SETUP___*//
+
+    bool debug = false;
+
     SetRandomSeed((unsigned int)time(NULL));
     
     Checkpoints checkpoints = {0}; 
     {  // add checkpoints data
-        addCheckpoint(&checkpoints, "Abandoned House",      30, SITE,(Inventory){50, 200,  10, 40});
-        addCheckpoint(&checkpoints, "The Cave",             60, SITE,(Inventory){ 0,   0,   0,  2});
-        addCheckpoint(&checkpoints, "Petrolina",            90, TOWN,(Inventory){50, 200,  10, 40});
-        addCheckpoint(&checkpoints, "Serra Talhada",       110, TOWN,(Inventory){50, 200,  10, 10});
-        addCheckpoint(&checkpoints, "Carnabeira da Penha", 140, TOWN,(Inventory){15, 249, 100, 23});
+        addCheckpoint(&checkpoints, "Abandoned House",      20, SITE,(Inventory){50, 200,  10, 40});
+        addCheckpoint(&checkpoints, "The Cave",             35, SITE,(Inventory){ 0,   0,   0,  2});
+        addCheckpoint(&checkpoints, "Petrolina",            40, TOWN,(Inventory){50, 200,  10, 40});
+        addCheckpoint(&checkpoints, "Serra Talhada",        70, TOWN,(Inventory){50, 200,  10, 10});
+        addCheckpoint(&checkpoints, "Carnabeira da Penha",  90, TOWN,(Inventory){15, 249, 100, 23});
         // (Inventory) {food, ammo, weapon, footwear}
     }
 
@@ -703,6 +723,7 @@ int main() {
         // Restart
         if (IsKeyPressed(KEY_R)) {
             game.state = STATE_PLAYING;
+            game.activeFlags = COND_NONE;
             
             game.hours = 0;
             game.distance = 0;
@@ -714,7 +735,12 @@ int main() {
             setupParty(&game.party);
         }
 
-        // Save Game
+        // Toogle Debug
+        if (IsKeyPressed(KEY_D)) {
+            debug = !debug;
+        }
+
+        // next animation frame (delete)
         if (IsKeyPressed(KEY_UP)) {
             spriteFamilia.currentFrame = (spriteFamilia.currentFrame + 1) % spriteFamilia.frameCount;
         }
@@ -765,6 +791,8 @@ int main() {
 
                 simulateWeather(&game.weather, &game.weatherSimCounter, currentMonthInt(game.hours));
 
+                game.activeFlags = updateActiveFlags(&game);
+
                 // check gameover
                 if (game.party.count == 0 && game.party.dog.dead == true) {
                     game.state = STATE_GAMEOVER;
@@ -776,7 +804,7 @@ int main() {
                     activeStopMenu = 3; // town menu index
                 } else {
                     // roll eventos aleatorios
-                    updateActiveFlags(&game);
+                    // game.activeFlags = updateActiveFlags(&game);
                     refreshEventPool(game.distance, game.activeFlags);
                     bool eventShouldHappen = GetRandomValue(0,100) < 30 ? true : false;
                     if (eventShouldHappen) {
@@ -825,6 +853,24 @@ int main() {
         BeginDrawing();
 
             ClearBackground(BLACK);
+
+            // Debug
+            if (debug){
+                unsigned int allFlags[] =     {COND_LOW_FOOD, COND_LOW_MONEY, COND_ALONE, COND_SICK_DOG, COND_DOGLESS, COND_NIGHT, COND_VERY_HOT, COND_RAINY, COND_VERY_RAINY};
+                const char* allFlagsTexts[] = {"LOWFOOD"    , "LOWMONEY"    , "ALONE"   , "SICKDOG"    , "DOGLESS"   , "NIGHT"   , "VERY_HOT"   , "RAINY"   , "VERY RAINY"   };
+                int implementedFlagCount = sizeof(allFlags) / sizeof(unsigned int);
+
+                Vector2 pos = {30,300};
+                int margin = 20;
+                int size = 20;
+                int padding = 20;
+                DrawRectangle(pos.x, pos.y, 200, (size*implementedFlagCount)+ padding * 2,WHITE);
+                for (int i = 0; i < implementedFlagCount; i++){
+                    
+                    DrawText(allFlagsTexts[i], pos.x + padding, pos.y + padding + (i*margin),size,(game.activeFlags & allFlags[i]) == allFlags[i] ? RED : BLACK);
+                }
+
+            }
 
             // Draw Gameover
             if (game.state == STATE_GAMEOVER) {
@@ -963,8 +1009,8 @@ int main() {
                 if (activeStopSubmenu == SUBMENU_NONE) {
 
                     // const char* base = "Party;Faith;Supply";
-                    char* options;
-                    char* leaveText;
+                    char options[256];
+                    char leaveText[32];
                     if (inCheckpoint){
                         switch (checkpoints.type[game.checkpointsVisited])
                         {
@@ -1042,7 +1088,7 @@ int main() {
                         GuiButton((Rectangle) {40, 200, width, height}, "Rationing");
                         break;
                     case 3 /* Checkpoint */:  
-                        { // Draw city
+                        { // Draw city menu
                             int size = 30;
                             int width = MeasureText(checkpoints.name[game.checkpointsVisited], size);
                             int x = windowWidth / 2 - width / 2;
