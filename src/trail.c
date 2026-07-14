@@ -418,6 +418,7 @@ typedef struct {
     int currentEvent;
     int checkpointsVisited;
     Party party;
+    char eventMessageBuffer[256];
 } GameData;
 
 // Event condition flags
@@ -510,17 +511,32 @@ void addOption(Event *e, char *message, int nextIndex){
     e->numOptions++;
 }
 
-void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *hours, int *partyMoney, Inventory *partyInventory){
+void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *hours, Party *party, char *msgBuffer){
     *currentEvent = eventId;  // set new id
     *gameState = STATE_EVENT; // set gamestate
 
+    // randomizando um membro para eventos personalizados 
+    int randomMember = GetRandomValue(0, 3);
+    for (int i = 0; i < 3; i++){
+        if (!party->member[randomMember].dead) break;
+        randomMember = (randomMember + 1) % 4;
+    }
+    /* no pior caso, onde todos estejam mortos (coberto por STATE_GAMEEND), so damos 4 loops aqui... preferi do que usar um while. 
+       TODO: deve ter um jeito mais certo de fazer.
+    */
+
+    // montando o novo string (char*) com o membro randomizado.
+    char *temp = TextReplace(events[eventId].message, "%p", party->member[randomMember].name); // aloca espaco necessario para nova mensagem substituindo o %p pelo player e retorna um ponteiro para ela. (PRECISA FREE A MEMORIA MANUALMENTE)
+    strcpy(msgBuffer, temp);
+    free(temp);
+
     if (events[eventId].effects){
         *hours += events[eventId].effects->hours;
-        *partyMoney += events[eventId].effects->money;
-        partyInventory->ammo += events[eventId].effects->inventory.ammo;
-        partyInventory->food += events[eventId].effects->inventory.food;
-        partyInventory->footwear += events[eventId].effects->inventory.footwear;
-        partyInventory->weapon += events[eventId].effects->inventory.weapon;
+        party->money += events[eventId].effects->money;
+        party->inventory.ammo += events[eventId].effects->inventory.ammo;
+        party->inventory.food += events[eventId].effects->inventory.food;
+        party->inventory.footwear += events[eventId].effects->inventory.footwear;
+        party->inventory.weapon += events[eventId].effects->inventory.weapon;
         // continue here
     }
 }
@@ -630,7 +646,7 @@ int main() {
 
         events[1] = createEvent("Muita gente morreu nessa região.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[2] = createEvent("Um rio seco.", EVENT_MESSAGE, NULL, 0, 9999, COND_NONE, COND_NONE);
-        events[3] = createEvent("Um cachorro selvagem olha estranho para vocês.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[3] = createEvent("Um cachorro selvagem olha estranho para %p.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[4] = createEvent("Longo dia...", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[5] = createEvent("A vontade é de largar tudo e sair correndo.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
@@ -641,16 +657,16 @@ int main() {
         // eventEmptyHouse
         #define EMPTY_HOUSE        11
 
-        events[EMPTY_HOUSE] = createEvent("Found empty house", EVENT_MESSAGE, NULL , 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
-        addOption(&events[EMPTY_HOUSE], "Enter", 32);
-        addOption(&events[EMPTY_HOUSE], "Go Away", -1);
+        events[EMPTY_HOUSE] = createEvent("%p achou uma casa abandonada", EVENT_MESSAGE, NULL , 20, 9999, COND_NONE, COND_NONE); // testing ranged distance events
+        addOption(&events[EMPTY_HOUSE], "Entrar", 32);
+        addOption(&events[EMPTY_HOUSE], "Ir embora", -1);
 
-        events[32] = createEvent("Nothing inside...", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[32] = createEvent("Nada dentro, ao menos de beber...", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
 
         // eventFoundStranger
         #define FOUND_STRANGER  12
 
-        events[FOUND_STRANGER] = createEvent("Um estranho chama sua atenção", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
+        events[FOUND_STRANGER] = createEvent("Um estranho chama atenção de %p", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         addOption(&events[FOUND_STRANGER], "Talk",     33);
         addOption(&events[FOUND_STRANGER], "Go Away",  -1);
         
@@ -665,8 +681,11 @@ int main() {
         events[35] = createEvent("Pegaram o caminho errado... Perdeu 4 horas.", EVENT_MESSAGE, createEffect(4,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
 
         // eventEmptyHouse
-        #define DOG_FOUND_FOOD        13
+        #define DOG_FOUND_FOOD  13
         events[DOG_FOUND_FOOD] = createEvent("Baleia achou um preá", EVENT_MESSAGE, createEffect(0,0,(Inventory){.ammo=0, .food=4, .footwear=0, .weapon=0}) , 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
+        
+        #define MEMBER_FINDS_FOOD  14
+        events[MEMBER_FINDS_FOOD] = createEvent("%p achou comida.", EVENT_MESSAGE, createEffect(0,0,(Inventory){.ammo=0, .food=16, .footwear=0, .weapon=0}) , 0, 9999, COND_NONE, COND_DOGLESS | COND_SICK_DOG);
 
     }
 
@@ -810,7 +829,7 @@ int main() {
                     if (eventShouldHappen) {
                         int poolIndex = GetRandomValue(0, activePoolCount - 1);
                         int chosenEventId = activeEventPool[poolIndex];
-                        triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours, &game.party.money, &game.party.inventory);
+                        triggerEvent(chosenEventId, &game.currentEvent, &game.state, &game.hours, &game.party, game.eventMessageBuffer);
 
                     }
                 }
@@ -884,16 +903,16 @@ int main() {
             if (game.state == STATE_EVENT) {
 
                 int size = 30;
-                int width = MeasureText(events[game.currentEvent].message, size);
+                int width = MeasureText(game.eventMessageBuffer, size);
                 int x = windowWidth / 2 - width / 2;
                 int y =  (windowHeight / 2) - 100;
 
                 if (events[game.currentEvent].numOptions == 0) {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(events[game.currentEvent].message, x, y, size, WHITE);
+                    DrawText(game.eventMessageBuffer, x, y, size, WHITE);
                 } else {
                     DrawRectangleLines(x-10, y-10, width+20, size+20, WHITE);
-                    DrawText(events[game.currentEvent].message, x, y, size, WHITE);
+                    DrawText(game.eventMessageBuffer, x, y, size, WHITE);
 
                     int opWidth = 200;
                     int opGap = 20;
@@ -904,7 +923,8 @@ int main() {
                         
                         if (GuiButton((Rectangle){((windowWidth / 2) - (opTotalWidth / 2)) + i*(opWidth+opGap),y+60,opWidth,40}, events[game.currentEvent].options[i].message)) {
                             if (events[game.currentEvent].options[i].nextId != -1) {
-                                triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours, &game.party.money, &game.party.inventory);
+                                triggerEvent(events[game.currentEvent].options[i].nextId, &game.currentEvent, &game.state, &game.hours, &game.party, game.eventMessageBuffer);
+                                
                             } else {
                                 game.state = STATE_PLAYING;
                             }
@@ -959,7 +979,7 @@ int main() {
                     DrawText(TextFormat("Alive: %d", game.party.count),         30,  90, size, WHITE);
                     DrawText(TextFormat("Money: %d", game.party.money),         30, 120, size, WHITE);
                     DrawText(TextFormat("Events: %d", activePoolCount),         30, 150, size, WHITE);
-                    // DrawText(TextFormat("wSimCounter: %d", game.weatherSimCounter),         30, 180, size, WHITE);
+                    DrawText(TextFormat("wSimCounter: %d", game.weatherSimCounter),         30, 180, size, WHITE);
                 }
 
 
