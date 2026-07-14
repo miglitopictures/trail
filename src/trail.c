@@ -137,7 +137,6 @@ enum State {
 // cachorro tem menos vida, mas talvez pode ter energia que diminui e quando zera comeca  aperder vida
 typedef struct {
     char name[16];
-    //// bool foundFood;
     bool dead;
     bool sick;
     int health;
@@ -191,7 +190,7 @@ typedef struct {
 
 #define PERSON_MAX_HEALTH 300
 #define PERSON_MAX_ENERGY 300
-#define DOG_MAX_HEALTH 100
+#define DOG_MAX_HEALTH 300
 
 void setupParty(Party *party){
 
@@ -315,13 +314,13 @@ void simulateParty(Party *party, float *distance, int *hours){
         // simulate dog sickness
         if (!party->dog.sick){
             int roll = GetRandomValue(1,100);
-            int chanceOfSickness = 50;
+            int chanceOfSickness = 5;
             if (roll < chanceOfSickness){
                 party->dog.sick = true;
             }
         } else {
             int roll = GetRandomValue(0,100);
-            if (roll < 1){
+            if (roll < 10){
                 party->dog.sick = false;
             }
         }
@@ -515,18 +514,24 @@ void triggerEvent(int eventId, int *currentEvent, enum State *gameState, int *ho
     *currentEvent = eventId;  // set new id
     *gameState = STATE_EVENT; // set gamestate
 
+    char *playerName;
     // randomizando um membro para eventos personalizados 
-    int randomMember = GetRandomValue(0, 3);
-    for (int i = 0; i < 3; i++){
-        if (!party->member[randomMember].dead) break;
-        randomMember = (randomMember + 1) % 4;
+    if (!party->count == 0){
+        int randomMember = GetRandomValue(0, 3);
+        for (int i = 0; i < 3; i++){
+            if (!party->member[randomMember].dead) break;
+            randomMember = (randomMember + 1) % 4;
+        }
+        playerName = party->member[randomMember].name;
+    } else {
+        playerName = party->dog.name;
     }
     /* no pior caso, onde todos estejam mortos (coberto por STATE_GAMEEND), so damos 4 loops aqui... preferi do que usar um while. 
        TODO: deve ter um jeito mais certo de fazer.
     */
 
     // montando o novo string (char*) com o membro randomizado.
-    char *temp = TextReplace(events[eventId].message, "%p", party->member[randomMember].name); // aloca espaco necessario para nova mensagem substituindo o %p pelo player e retorna um ponteiro para ela. (PRECISA FREE A MEMORIA MANUALMENTE)
+    char *temp = TextReplace(events[eventId].message, "%p", playerName); // aloca espaco necessario para nova mensagem substituindo o %p pelo player e retorna um ponteiro para ela. (PRECISA FREE A MEMORIA MANUALMENTE)
     strcpy(msgBuffer, temp);
     free(temp);
 
@@ -652,7 +657,7 @@ int main() {
         events[6] = createEvent("Passam um esqueleto de boi.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[7] = createEvent("Uma fazenda... Longe demais para pedir água.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
         events[8] = createEvent("Passarinhos piam na distância.", EVENT_MESSAGE, NULL , 0, 9999, COND_NONE, COND_NONE);
-        events[9] = createEvent("Pegou a estrada errada! Perdeu 6 horas.", EVENT_MESSAGE, createEffect(6,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
+        events[9] = createEvent("%p pegou a estrada errada! Perderam 6 horas.", EVENT_MESSAGE, createEffect(6,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
         events[10] = createEvent( "Andaram em círculos... Perdeu 3 horas.", EVENT_MESSAGE, createEffect(3,0,(Inventory){0}) , 0, 9999, COND_NONE, COND_NONE);
         // eventEmptyHouse
         #define EMPTY_HOUSE        11
