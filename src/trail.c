@@ -882,7 +882,8 @@ int main() {
             if (debug){
                 unsigned int allFlags[] =     {COND_LOW_FOOD, COND_LOW_MONEY, COND_ALONE, COND_SICK_DOG, COND_DOGLESS, COND_NIGHT, COND_VERY_HOT, COND_RAINY, COND_VERY_RAINY};
                 const char* allFlagsTexts[] = {"LOWFOOD"    , "LOWMONEY"    , "ALONE"   , "SICKDOG"    , "DOGLESS"   , "NIGHT"   , "VERY_HOT"   , "RAINY"   , "VERY RAINY"   };
-                int implementedFlagCount = sizeof(allFlags) / sizeof(unsigned int);
+                                
+                int implementedFlagCount = sizeof(allFlags) / sizeof(unsigned int); // length of list (caixa com X saco de feijao pesa 10kg. 1 saco de feijao pesa 1kg. quantos sacos de feijao meu irmao?)
 
                 Vector2 pos = {30,300};
                 int margin = 20;
